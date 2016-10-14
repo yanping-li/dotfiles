@@ -68,8 +68,8 @@ set cindent
 set shiftwidth=4
 
 " Display trailing whitespace
-set listchars=tab:»·,trail:.
 set list
+set listchars=tab:>-,trail:.,extends:>,precedes:<
 
 " Highlight searches
 set hlsearch
