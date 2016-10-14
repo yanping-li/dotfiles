@@ -43,11 +43,11 @@ set noeol
 set backupdir=~/.vim/backups
 set directory=~/.vim/swaps
 if exists("&undodir")
-	set undodir=~/.vim/undo
+    set undodir=~/.vim/undo
 endif
 
-" Enable line numbers
-set number
+" Disable line numbers
+set nonumber
 
 " Enable syntax highlighting
 syntax on
