@@ -1,29 +1,44 @@
-" Use the Solarized Dark theme
-set background=dark
-colorscheme solarized
-let g:solarized_termtrans=1
 
-" Make Vim more useful
+"  If you don't understand a setting in here, just type ':h setting'.
+ 
+" This must be first, because it changes other options as a side effect.
 set nocompatible
+
+" SET COLOR
+" number of color
+set t_Co=16
+" set background color (ANSI)
+set t_AB=[%?%p1%{8}%<%t%p1%{40}%+%e%p1%{92}%+%;%dm
+" set foreground color (ANSI)
+set t_AF=[%?%p1%{8}%<%t%p1%{30}%+%e%p1%{82}%+%;%dm
+" set background color
+set t_Sb=[4%p1%dm
+" set foreground color
+set t_Sf=[3%p1%dm
+
+" colurscheme, ~/.vim/colors/desert.vim
+color desert
+
 " Use the OS clipboard by default (on versions compiled with `+clipboard`)
 set clipboard=unnamed
+
 " Enhance command-line completion
 set wildmenu
-" Allow cursor keys in insert mode
-set esckeys
+
 " Allow backspace in insert mode
 set backspace=indent,eol,start
-" Optimize for fast terminal connections
+
+" Optimize for fast terminal connections.
+" This helps when using copy/paste with the mouse in an xterm and other terminals.
 set ttyfast
-" Add the g flag to search/replace by default
-set gdefault
+
 " Use UTF-8 without BOM
 set encoding=utf-8 nobomb
-" Change mapleader
-let mapleader=","
-" Don’t add empty newlines at the end of files
+
+" Don't add empty newlines at the end of files
 set binary
 set noeol
+
 " Centralize backups, swapfiles and undo history
 set backupdir=~/.vim/backups
 set directory=~/.vim/swaps
@@ -31,76 +46,81 @@ if exists("&undodir")
 	set undodir=~/.vim/undo
 endif
 
-" Don’t create backups when editing files in certain directories
-set backupskip=/tmp/*,/private/tmp/*
-
-" Respect modeline in files
-set modeline
-set modelines=4
-" Enable per-directory .vimrc files and disable unsafe commands in them
-set exrc
-set secure
 " Enable line numbers
 set number
+
 " Enable syntax highlighting
 syntax on
+
 " Highlight current line
-set cursorline
-" Make tabs as wide as two spaces
-set tabstop=2
-" Show “invisible” characters
-set lcs=tab:▸\ ,trail:·,eol:¬,nbsp:_
+"set cursorline
+
+" Make tab as wide as 4 spaces
+set tabstop=4
+
+" expand TAB into spaces
+set expandtab
+
+" c style indent
+set cindent
+
+" 4 spaces indent
+set shiftwidth=4
+
+" Display trailing whitespace
+set listchars=tab:��,trail:.
 set list
+
 " Highlight searches
 set hlsearch
-" Ignore case of searches
+
+" Ignore case of searches, overwrite 'ignorecase' if search pattern contain upper case characters
 set ignorecase
+set smartcase
+
 " Highlight dynamically as pattern is typed
 set incsearch
+
+" no wrap
+set nowrap
+
 " Always show status line
 set laststatus=2
-" Enable mouse in all modes
-set mouse=a
+
 " Disable error bells
 set noerrorbells
-" Don’t reset cursor to start of line when moving around.
+
+" Don't reset cursor to start of line when moving around (CTRL-D, CTRL-U, CTRL-F, CTRL-B ...).
 set nostartofline
-" Show the cursor position
+
+" Show the cursor position in status line
 set ruler
-" Don’t show the intro message when starting Vim
+
+" Don't show intro message when starting vim
 set shortmess=atI
+
 " Show the current mode
 set showmode
+
 " Show the filename in the window titlebar
 set title
-" Show the (partial) command as it’s being typed
-set showcmd
-" Use relative line numbers
-if exists("&relativenumber")
-	set relativenumber
-	au BufReadPost * set relativenumber
-endif
-" Start scrolling three lines before the horizontal window border
-set scrolloff=3
 
-" Strip trailing whitespace (,ss)
-function! StripWhitespace()
-	let save_cursor = getpos(".")
-	let old_query = getreg('/')
-	:%s/\s\+$//e
-	call setpos('.', save_cursor)
-	call setreg('/', old_query)
-endfunction
-noremap <leader>ss :call StripWhitespace()<CR>
-" Save a file as root (,W)
-noremap <leader>W :w !sudo tee % > /dev/null<CR>
+" Show the (partial) command as it's being typed
+set showcmd
+
+" Start scrolling 2 lines before the horizontal window border
+set scrolloff=2
+
+" set at the end of .vimrc file
+set secure
 
 " Automatic commands
 if has("autocmd")
-	" Enable file type detection
-	filetype on
-	" Treat .json files as .js
-	autocmd BufNewFile,BufRead *.json setfiletype json syntax=javascript
-	" Treat .md files as Markdown
-	autocmd BufNewFile,BufRead *.md setlocal filetype=markdown
+    " Enable file type detection and do language-dependent indenting.
+    filetype plugin indent on
+    " Treat .json files as .js
+    autocmd BufNewFile,BufRead *.json setfiletype json syntax=javascript
+    " Treat .md files as Markdown
+    autocmd BufNewFile,BufRead *.md setlocal filetype=markdown
 endif
+
