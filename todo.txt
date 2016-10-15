@@ -1,5 +1,11 @@
 
 
-1. vundle plugin
-2. editorconfig plugin
-3. gitconfig [name email ...]
+# vundle plugin
+
+# editorconfig plugin
+
+# gitconfig
+
+
+
+
