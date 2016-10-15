@@ -4,6 +4,58 @@
 " This must be first, because it changes other options as a side effect.
 set nocompatible
 
+filetype off                  " required
+" Change mapleader
+let mapleader=","
+
+" set the runtime path to include Vundle and initialize
+set rtp+=~/.vim/bundle/Vundle.vim
+call vundle#begin()
+
+" let Vundle manage Vundle, required
+Plugin 'gmarik/Vundle.vim'
+
+" filesystem tree
+Plugin 'scrooloose/nerdtree'
+autocmd StdinReadPre * let s:std_in=1
+autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTreeType") && b:NERDTreeType == "primary") | q | endif
+map <C-n> :NERDTreeToggle<CR>
+map <Leader>n :NERDTree %:p:h<CR>
+
+Plugin 'Valloric/YouCompleteMe'
+
+Plugin 'jiangmiao/auto-pairs'
+
+" quick google search
+Plugin 'szw/vim-g'
+
+Plugin 'vim-scripts/DrawIt'
+
+Plugin 'tpope/vim-eunuch'
+
+Plugin 'vim-scripts/DeleteTrailingWhitespace'
+
+" all lanugage support
+Plugin 'sheerun/vim-polyglot'
+
+" change surroundins - cs/ds/ysiw/yss
+Plugin 'tpope/vim-surround'
+
+" do syntax check
+Plugin 'scrooloose/syntastic'
+
+" fuzzy file find
+Plugin 'kien/ctrlp.vim'
+
+" vim cscope
+" Plugin 'vim-scripts/cscope.vim'
+
+" All of your Plugins must be added before the following line
+call vundle#end()            " required
+filetype plugin indent on    " required
+
+
 " SET COLOR
 " number of color
 set t_Co=16
@@ -117,7 +169,7 @@ set secure
 " Automatic commands
 if has("autocmd")
     " Enable file type detection and do language-dependent indenting.
-    filetype plugin indent on
+    filetype on
     " Treat .json files as .js
     autocmd BufNewFile,BufRead *.json setfiletype json syntax=javascript
     " Treat .md files as Markdown
