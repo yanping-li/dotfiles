@@ -9,8 +9,10 @@ for file in ~/.{path,bash_prompt,exports,aliases,functions,extra}; do
 done;
 unset file;
 
+# Don't enable case-insensitive globbing.
+# It's dangerous for some command, e.g. "rm *LOG*" will remove "LOG.rar" and "log.txt".
 # Case-insensitive globbing (used in pathname expansion)
-shopt -s nocaseglob;
+# shopt -s nocaseglob;
 
 # Append to the Bash history file, rather than overwriting it
 shopt -s histappend;
