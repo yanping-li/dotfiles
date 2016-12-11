@@ -119,6 +119,9 @@ set cindent
 " 4 spaces indent
 set shiftwidth=4
 
+" 100 characters per line
+set textwidth=100
+
 " Don't display trailing whitespace
 set nolist
 set listchars=tab:>-,trail:.,extends:>,precedes:<
