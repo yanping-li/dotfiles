@@ -40,12 +40,14 @@ function PR() {
     # create dir if not exist
     if [ $dir_exist -ne 1 ]
     then
-        echo "Dir \"$dir_name\" created"
+        echo "${PS1}mkdir -p $dir_name"
         mkdir -p $dir_name
     fi
 
     # goto dir
+    echo "${PS1}cd $dir_name"
     cd $dir_name
+    echo "${PS1}pwd"
     pwd
 
     return
