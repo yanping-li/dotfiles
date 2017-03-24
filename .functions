@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
+# Usage example: cdpr 1234567
 # If PR directory does not exist, create it, and then go to PR directory
-function PR() {
+function cdpr() {
     local first_attempt="/homes/lexli/pr/$1" 
     local second_attempt="/homes/lexli/d070/$1" 
     local dir_exist=0
@@ -52,6 +53,78 @@ function PR() {
 
     return
 }
+
+
+# Usage example: cdsb X44D50
+# Go to sandbox of specified release
+function cdsb() {
+    local version=""
+    local major=""
+    local minor=""
+    local norm_version=""
+    local sbdir=""
+
+    if [[ $# -ne 1 ]] ; then
+        echo "Usage: cdpr <pr-number>"
+        return
+    fi
+
+    version=$1
+
+    #
+    # normalize version
+    #
+    echo "$version" | grep -q "X"
+    if [[ $? -ne 0 ]]
+    then
+        echo 'missing "X", wrong version?'
+        return
+    fi
+
+    echo "$version" | grep -q "D"
+    if [[ $? -ne 0 ]]
+    then
+        echo 'missing "D", wrong version?'
+        return
+    fi
+
+    major=$(echo "$version" | sed -e 's/.*\(X[0-9]*\).*/\1/')
+    minor=$(echo "$version" | sed -e 's/.*\(D[0-9]*.*\)/\1/')
+    #echo "major = $major"
+    #echo "minor = $minor"
+
+    case $major in
+    "X44") ;&
+    "X45") ;&
+    "X46") ;&
+    "X47")
+        junos_major="12.1"
+        ;;
+
+    "X48")
+        junos_major="12.3"
+        ;;
+
+    "X49")
+        junos_major="15.1"
+        ;;
+    *)
+        echo "unknown version: $version"
+        return
+    esac
+
+    norm_version=$junos_major$major"-"$minor
+    # echo "version = $version"
+    # echo "norm version = $norm_version"
+
+    # go to sandbox
+    sbdir="/volume/build/junos/"$junos_major"/service/"$norm_version
+    echo "${PS1}cd $sbdir"
+    cd "$sbdir"
+    echo "${PS1}pwd"
+    pwd
+}
+
 
 # Create a new directory and enter it
 function mkd() {
