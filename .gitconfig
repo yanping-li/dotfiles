@@ -201,3 +201,5 @@
 [user]
 	name = Yanping Li
 	email = [liyanping@gmail.com]
+[branch]
+	autosetuprebase = always
