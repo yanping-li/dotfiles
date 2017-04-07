@@ -74,22 +74,24 @@ function cdsb() {
     #
     # normalize version
     #
-    echo "$version" | grep -q "X"
+    echo "$version" | grep -q -i "X"
     if [[ $? -ne 0 ]]
     then
         echo 'missing "X", wrong version?'
         return
     fi
 
-    echo "$version" | grep -q "D"
+    echo "$version" | grep -q -i "D"
     if [[ $? -ne 0 ]]
     then
         echo 'missing "D", wrong version?'
         return
     fi
 
-    major=$(echo "$version" | sed -e 's/.*\(X[0-9]*\).*/\1/')
-    minor=$(echo "$version" | sed -e 's/.*\(D[0-9]*.*\)/\1/')
+    major=$(echo "$version" | sed -e 's/.*\([Xx][0-9]*\).*/\1/')
+    major=$(echo "$major" | sed -e 's/x/X/')
+    minor=$(echo "$version" | sed -e 's/.*\([Dd][0-9]*.*\)/\1/')
+    minor=$(echo "$minor" | sed -e 's/d/D/')
     #echo "major = $major"
     #echo "minor = $minor"
 
