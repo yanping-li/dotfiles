@@ -127,6 +127,12 @@ function cdsb() {
     pwd
 }
 
+# grep multi log files in chronological order
+function greplog() {
+    logfiles="$1*"
+    shift 1
+	find . -name "$logfiles" | sort -r | xargs grep --color=auto "$@"
+}
 
 # Create a new directory and enter it
 function mkd() {
