@@ -8,6 +8,11 @@ function cdpr() {
     local dir_exist=0
     local dir_name=$second_attempt
 
+    if [[ $# -ne 1 ]] ; then
+        echo "Usage: cdpr <pr-number>"
+        return
+    fi
+
     # make sure it's a PR number
     echo "$1" | grep -q '[^0-9]'
     if [ $? = 0 ]
@@ -65,7 +70,7 @@ function cdsb() {
     local sbdir=""
 
     if [[ $# -ne 1 ]] ; then
-        echo "Usage: cdpr <pr-number>"
+        echo "Usage: cdsb <release>"
         return
     fi
 
@@ -129,9 +134,15 @@ function cdsb() {
 
 # grep multi log files in chronological order
 function greplog() {
+
+    if [[ $# -ne 2 ]] ; then
+        echo "Usage: greplog <logfile> <regex>"
+        return
+    fi
+
     logfiles="$1*"
     shift 1
-	find . -name "$logfiles" | sort -r | xargs grep --color=auto "$@"
+	find . -maxdepth 1 -name "$logfiles" | sort -r | xargs grep --color=auto "$@"
 }
 
 # Create a new directory and enter it
