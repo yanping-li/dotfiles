@@ -18,7 +18,8 @@ Plugin 'gmarik/Vundle.vim'
 " filesystem tree
 Plugin 'scrooloose/nerdtree'
 autocmd StdinReadPre * let s:std_in=1
-autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
+" uncomment below to start NERDTree on vim startup
+" autocmd VimEnter * if argc() == 0 && !exists("s:std_in") | NERDTree | endif
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTreeType") && b:NERDTreeType == "primary") | q | endif
 map <C-n> :NERDTreeToggle<CR>
 map <Leader>n :NERDTree %:p:h<CR>
