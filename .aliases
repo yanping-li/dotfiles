@@ -27,6 +27,9 @@ fi
 # Download attachment from gnats
 alias gget="wget --user=lexli --ask-password"
 
+# Find RSI in current directory
+alias findrsi="find . -iname '*rsi*'"
+
 # List all files colorized in long format
 alias ll="ls -lF ${colorflag}"
 
