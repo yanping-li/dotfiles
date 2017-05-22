@@ -3,8 +3,9 @@
 # Usage example: cdpr 1234567
 # If PR directory does not exist, create it, and then go to PR directory
 function cdpr() {
-    local first_attempt="/homes/lexli/pr/$1" 
-    local second_attempt="/homes/lexli/d070/$1" 
+    local PR=$1
+    local first_attempt="/homes/lexli/pr/$PR" 
+    local second_attempt="/homes/lexli/d070/$PR" 
     local dir_exist=0
     local dir_name=$second_attempt
 
@@ -14,10 +15,10 @@ function cdpr() {
     fi
 
     # make sure it's a PR number
-    echo "$1" | grep -q '[^0-9]'
+    echo "$PR" | grep -q '[^0-9]'
     if [ $? = 0 ]
     then
-        echo "is \"$1\" a PR number?"
+        echo "is \"$PR\" a PR number?"
         return 0
     fi
  
@@ -43,11 +44,19 @@ function cdpr() {
         fi
     fi
 
-    # create dir if not exist
+    # create dir if not exist, need confirmation first
     if [ $dir_exist -ne 1 ]
     then
-        echo "${PS1}mkdir -p $dir_name"
-        mkdir -p $dir_name
+        read -p "PR$PR directory does not exist, want to create it? [y/n]" -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]
+        then
+            echo "${PS1}mkdir -p $dir_name"
+            mkdir -p $dir_name
+        else
+            echo "Quit without touching anything"
+            return
+        fi
     fi
 
     # goto dir
