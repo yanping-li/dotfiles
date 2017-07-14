@@ -110,10 +110,7 @@ function cdsb() {
     #echo "minor = $minor"
 
     case $major in
-    "X44") ;&
-    "X45") ;&
-    "X46") ;&
-    "X47")
+    "X44"|"X45"|"X46"|"X47")
         junos_major="12.1"
         ;;
 
