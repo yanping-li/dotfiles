@@ -3,7 +3,7 @@ export PATH="$HOME/bin:$PATH";
 
 # switch readline to vi mode (emacs by default)
 # press 'ESC' and edit the line like in vi
-set -o vi
+# set -o vi
 
 # Load the shell dotfiles, and then some:
 # * ~/.path can be used to extend `$PATH`.
