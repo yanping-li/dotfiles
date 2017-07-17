@@ -138,6 +138,67 @@ function cdsb() {
     pwd
 }
 
+# Usage example: goto d070
+# Usage example: goto ubm
+# Usage example: goto ce-srx3400-1
+# Login to remote server/dut
+function goto() {
+    local name=$1
+    local user_at_server=''
+    local match=0
+    local is_d
+    local is_ubm
+    local is_dut
+    local is_mac
+
+    if [[ $# -ne 1 ]] ; then
+        echo "Usage: goto <server-name/dut-name>"
+        return
+    fi
+
+    # is d070?
+    echo "$name" | grep -q 'd[0-9]'
+    if [ $? = 0 ]
+    then
+        match=1
+        user_at_server='lexli@svl-junos-'$name'.juniper.net'
+    fi
+ 
+    # is ubm?
+    if [ $match = 0 ]
+    then
+        echo "$name" | grep -q 'ubm'
+        if [ $? = 0 ]
+        then
+            match=1
+            user_at_server='lexli@contrail-ubm-lexli.ccp.juniper.net'
+        fi
+    fi
+
+    # is dut?
+    if [ $match = 0 ]
+    then
+        echo "$name" | grep -q 'srx'
+        if [ $? = 0 ]
+        then
+            match=1
+            user_at_server='root@'$name'.spglab.juniper.net'
+        fi
+    fi
+
+    # do ssh
+    if [ $match = 0 ]
+    then
+        echo 'Is "'$name'" a good server name'
+    else
+        # ssh to server
+        echo "ssh $user_at_server"
+        ssh $user_at_server
+    fi
+
+    return
+}
+
 # grep multi log files in chronological order
 function greplog() {
 
