@@ -178,7 +178,7 @@ function goto() {
     # is dut?
     if [ $match = 0 ]
     then
-        echo "$name" | grep -q 'srx'
+        echo "$name" | grep -q 'ce-'
         if [ $? = 0 ]
         then
             match=1
@@ -197,6 +197,46 @@ function goto() {
     fi
 
     return
+}
+
+# list frequently used DUTs/Servers
+function lsdut() {
+    cat ~/.servers_and_devices
+}
+
+# list frequently used directories in sandbox
+function lsdir() {
+
+    alldirs="kernel xlp                      obj-xlp64/junos/bsd/kernels/SPU_XLP64/kernel
+kernel xlr                      obj-xlr/junos/bsd/kernels/SPU_XLR/kernel/kernel
+kernel old-xlr                  obj-xlr/bsd/kernels/SPU_XLR/kernel/kernel
+kernel RE 5K                    obj-i386/bsd/kernels/JUNIPER/kernel
+kernel RE 5K(X48 and onwards)   obj-i386/junos/bsd/kernels/JUNIPER/kernel
+kernel RE 1K3K                  obj-powerpc/bsd/kernels/JUNIPER-SRX/kernel
+kernel RE branch                obj-octeon/junos/bsd/kernels/JSRXNLE/kernel
+
+flowd xlr 10.2                  obj-pfe/pfe/obj-flowd-xlr/flowd_xlr
+flowd xlr                       obj-xlr-static/pfe/obj-flowd-xlr/flowd-xlr
+flowd xlr-64                    obj-xlr64-static/pfe/obj-flowd-spu/flowd-xlr64
+flowd xlp-64                    obj-xlp64-static/pfe/obj-flowd-spu/flowd-xlp64
+flowd cpd                       obj-xlr-static/pfe/obj-cpd-xlr/cpd-master-xlr/cpd_master_xlr    obj-xlr-static/pfe/obj-cpd-xlr/cpd-slave-xlr/cpd_slave_xlr
+flowd branch                    obj-pfe/pfe/obj-flowd-octeon-srx/flowd_octeon_hm                obj-octeon-static/pfe/obj-flowd-octeon-srx/flowd-octeon/            obj-octeon-static/pfe/obj-flowd-octeon-srx/flowd-octeon-hm/
+flowd jsr                       obj-i386/pfe/obj-flowd2/flowd2/flowd
+
+NSD RE 1K3K                     obj-powerpc-usp/usp/usr.sbin/nsd/nsd
+NSD RE branch                   obj-octeon-usp/usp/usr.sbin/nsd/nsd
+NSD RE 5K                       obj-i386-usp/usp/usr.sbin/nsd/nsd
+chasd RE 5K                     obj-i386/junos/usr.sbin/chasd
+
+ioc2                            obj-ppce500/pfe/obj-ioc2
+
+daily build sandbox             /homes/slt-builder/sandboxes/
+
+linux daily build               /homes/ssd-builder/ngsrx-yocto-daily/
+linux release                   /homes/ssd-builder/ngsrx-yocto-daily/ARCHIVE/
+linux srxpfe                    obj-x86-srx-mr/BUILD/srxpfe-1.0-1/srxpfe"
+
+    echo "$alldirs"
 }
 
 # grep multi log files in chronological order
