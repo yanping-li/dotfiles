@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-PS1="> "
+PS1="\h$ "
 export PS1;

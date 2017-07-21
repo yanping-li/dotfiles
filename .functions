@@ -51,7 +51,7 @@ function cdpr() {
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]
         then
-            echo "${PS1}mkdir -p $dir_name"
+            echo "$ mkdir -p $dir_name"
             mkdir -p $dir_name
         else
             echo "Quit without touching anything"
@@ -60,9 +60,9 @@ function cdpr() {
     fi
 
     # goto dir
-    echo "${PS1}cd $dir_name"
+    echo "$ cd $dir_name"
     cd $dir_name
-    echo "${PS1}pwd"
+    echo "$ pwd"
     pwd
 
     return
@@ -132,9 +132,9 @@ function cdsb() {
 
     # go to sandbox
     sbdir="/volume/build/junos/"$junos_major"/service/"$norm_version
-    echo "${PS1}cd $sbdir"
+    echo "$ cd $sbdir"
     cd "$sbdir"
-    echo "${PS1}pwd"
+    echo "$ pwd"
     pwd
 }
 
