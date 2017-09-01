@@ -204,6 +204,11 @@ function lsdut() {
     cat ~/.servers_and_devices
 }
 
+# list frequently used DUTs/Servers
+function lsuserpassdir() {
+    cat ~/.user_pass_and_jtac_servers_and_jtac_dirs
+}
+
 # list frequently used directories in sandbox
 function lsdir() {
 

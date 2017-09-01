@@ -1,0 +1,32 @@
+-----------------------------------------------
+        User                Password
+-----------------------------------------------
+DUT:
+        root                Embe1mpls
+        regress             MaRtInI
+        root                netscreen
+        root                netscreen1
+        root                Juniper123
+        root                Juniper
+        root                lab123
+        jtac                jtac123
+
+ULTRALAB:
+        juniper             Juniper1
+
+
+RDP:
+        jtac-user           lab123
+        labroot             lab123
+        administrator       netscreen
+        administrator       jnpr123
+
+
+-----------------------------------------------
+        User                Password
+-----------------------------------------------
+JTAC Servers:
+
+jtac-vcenter.englabs.juniper.net
+JNPR\lexli
+windows password
