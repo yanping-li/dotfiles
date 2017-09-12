@@ -175,6 +175,17 @@ function goto() {
         fi
     fi
 
+    # is mbp?
+    if [ $match = 0 ]
+    then
+        echo "$name" | grep -q 'mbp'
+        if [ $? = 0 ]
+        then
+            match=1
+            user_at_server='lexli@lexli-mbp.jnpr.net'
+        fi
+    fi
+
     # is dut?
     if [ $match = 0 ]
     then
