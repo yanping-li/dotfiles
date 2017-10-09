@@ -24,6 +24,12 @@ else # macOS `ls`
     export LSCOLORS='BxBxhxDxfxhxhxhxhxcxcx'
 fi
 
+# Attach to an existing tmux session
+alias ta="tmux attach -t"
+
+# Create a new tmux session
+alias tn="tmux new -s"
+
 # Download attachment from gnats
 alias gget="wget --user=lexli --ask-password"
 
