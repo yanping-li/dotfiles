@@ -1,5 +1,45 @@
 #!/usr/bin/env bash
 
+# Usage: tn <session-name>
+# 1. Attach to existing tmux session if exists
+# 2. Create new session otherwise
+function ta() {
+    local match=0
+    local new_name=$1
+
+    # while loop is executed in subshell, any changes to the variable will not be available one the subshell exits.
+    # Using process substitution to prevent subshell.
+    while read line
+    do
+        echo "line = $line"
+        name=$(echo "$line" | sed -e 's/:.*$//')
+        echo "name = $name"
+        echo "new_name = $new_name"
+        if [ "$name" == "$new_name" ]
+        then
+            echo "match = $match"
+            match=1
+            echo "match = $match"
+            echo "matching"
+            break
+        fi
+    done <<< "$(tmux ls)"       # process substitution
+
+    echo "match = $match"
+
+    if [ $match = 1 ]
+    then
+        echo "attach"
+        tmux attach -t "$new_name"
+    else
+        echo "new"
+        tmux new -s "$new_name"
+    fi
+
+    return
+}
+
+
 # Usage example: cdpr 1234567
 # If PR directory does not exist, create it, and then go to PR directory
 function cdpr() {
