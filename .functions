@@ -11,28 +11,18 @@ function ta() {
     # Using process substitution to prevent subshell.
     while read line
     do
-        echo "line = $line"
         name=$(echo "$line" | sed -e 's/:.*$//')
-        echo "name = $name"
-        echo "new_name = $new_name"
         if [ "$name" == "$new_name" ]
         then
-            echo "match = $match"
             match=1
-            echo "match = $match"
-            echo "matching"
             break
         fi
     done <<< "$(tmux ls)"       # process substitution
 
-    echo "match = $match"
-
     if [ $match = 1 ]
     then
-        echo "attach"
         tmux attach -t "$new_name"
     else
-        echo "new"
         tmux new -s "$new_name"
     fi
 
