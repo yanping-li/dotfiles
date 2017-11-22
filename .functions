@@ -1,29 +1,39 @@
 #!/usr/bin/env bash
 
-# Usage: tn <session-name>
-# 1. Attach to existing tmux session if exists
-# 2. Create new session otherwise
+# Usage: ta <name-pattern>
+# Match existing tmux session names with name-pattern:
+# 1. If there is one match, attach to it.
+# 2. If there is more than one match, print session names.
+# 3. Create new session if no match.
 function ta() {
     local match=0
-    local new_name=$1
+    local pattern=$1
+    local matched_name=""
 
-    # while loop is executed in subshell, any changes to the variable will not be available one the subshell exits.
+    # while loop is executed in subshell, any changes to the variable will not be available once the subshell exits.
     # Using process substitution to prevent subshell.
     while read line
     do
         name=$(echo "$line" | sed -e 's/:.*$//')
-        if [ "$name" == "$new_name" ]
+        echo "$name" | grep -q -i "$pattern"
+        if [ $? -eq 0 ]
         then
-            match=1
-            break
+            echo "$name"
+            matched_name=$name
+            let match=$match+1
         fi
     done <<< "$(tmux ls)"       # process substitution
 
-    if [ $match = 1 ]
+    if [ $match -gt 1 ]
     then
-        tmux attach -t "$new_name"
+        return
+    fi
+
+    if [ $match -eq 1 ]
+    then
+        tmux attach -t "$matched_name"
     else
-        tmux new -s "$new_name"
+        tmux new -s "$pattern"
     fi
 
     return
@@ -46,7 +56,7 @@ function cdpr() {
 
     # make sure it's a PR number
     echo "$PR" | grep -q '[^0-9]'
-    if [ $? = 0 ]
+    if [ $? -eq 0 ]
     then
         echo "is \"$PR\" a PR number?"
         return 0
@@ -188,17 +198,17 @@ function goto() {
 
     # is d070?
     echo "$name" | grep -q 'd[0-9]'
-    if [ $? = 0 ]
+    if [ $? -eq 0 ]
     then
         match=1
         user_at_server='lexli@svl-junos-'$name'.juniper.net'
     fi
  
     # is ubm?
-    if [ $match = 0 ]
+    if [ $match -eq 0 ]
     then
         echo "$name" | grep -q 'ubm'
-        if [ $? = 0 ]
+        if [ $? -eq 0 ]
         then
             match=1
             user_at_server='lexli@contrail-ubm-lexli.ccp.juniper.net'
@@ -206,10 +216,10 @@ function goto() {
     fi
 
     # is mbp?
-    if [ $match = 0 ]
+    if [ $match -eq 0 ]
     then
         echo "$name" | grep -q 'mbp'
-        if [ $? = 0 ]
+        if [ $? -eq 0 ]
         then
             match=1
             user_at_server='lexli@lexli-mbp.jnpr.net'
@@ -217,10 +227,10 @@ function goto() {
     fi
 
     # is dut?
-    if [ $match = 0 ]
+    if [ $match -eq 0 ]
     then
         echo "$name" | grep -q 'ce-'
-        if [ $? = 0 ]
+        if [ $? -eq 0 ]
         then
             match=1
             user_at_server='root@'$name'.spglab.juniper.net'
@@ -228,7 +238,7 @@ function goto() {
     fi
 
     # do ssh
-    if [ $match = 0 ]
+    if [ $match -eq 0 ]
     then
         echo 'Is "'$name'" a good server name'
     else
