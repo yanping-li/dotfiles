@@ -14,7 +14,7 @@ function copyAndApplySysctl() {
         ;;
 
         Darwin*)
-        cp sysctl/sysctl.conf.osx /etc/sysctl.conf
+        sudo cp sysctl/sysctl.conf.osx /etc/sysctl.conf
         cat /etc/sysctl.conf | xargs sudo sysctl
         ;;
     esac
