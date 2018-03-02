@@ -300,7 +300,13 @@ daily build sandbox             /homes/slt-builder/sandboxes/
 
 linux daily build               /homes/ssd-builder/ngsrx-yocto-daily/
 linux release                   /homes/ssd-builder/ngsrx-yocto-daily/ARCHIVE/
-linux srxpfe                    obj-x86-srx-mr/BUILD/srxpfe-1.0-1/srxpfe"
+linux srxpfe                    obj-x86-srx-mr/BUILD/srxpfe-1.0-1/srxpfe
+
+JDEBUG:
+-------
+/volume/fsgtools/bin/jdebug
+-p srx-ffp | srx-700e | srx-mr ./localhost.srxpfe.3516.1463780517.core.tgz
+-l /homes/ssd-builder/ngsrx-yocto-daily/DEV_X_151_X49_BRANCH/2016-05-18.0/srx-ffp/sandbox/Linux-Sandbox/DEV_X_151_X49_BRANCH/  "
 
     echo "$alldirs"
 }
