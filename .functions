@@ -128,50 +128,64 @@ function cdsb() {
     #
     # normalize version
     #
+#    echo "$version" | grep -q -i "X"
+#    if [[ $? -ne 0 ]]
+#    then
+#        echo 'missing "X", wrong version?'
+#        return
+#    fi
+#
+#    echo "$version" | grep -q -i "D"
+#    if [[ $? -ne 0 ]]
+#    then
+#        echo 'missing "D", wrong version?'
+#        return
+#    fi
+
+    
+    # e.g. X48-D55
     echo "$version" | grep -q -i "X"
-    if [[ $? -ne 0 ]]
+    if [[ $? -eq 0 ]]
     then
-        echo 'missing "X", wrong version?'
-        return
+        echo "$version" | grep -q -i "D"
+        if [[ $? -ne 0 ]]
+        then
+            echo 'missing "D", wrong version?'
+            return
+        fi
+
+        major=$(echo "$version" | sed -e 's/.*\([Xx][0-9]*\).*/\1/')
+        major=$(echo "$major" | sed -e 's/x/X/')
+        minor=$(echo "$version" | sed -e 's/.*\([Dd][0-9]*.*\)/\1/')
+        minor=$(echo "$minor" | sed -e 's/d/D/')
+        #echo "major = $major"
+        #echo "minor = $minor"
+
+        case $major in
+        "X44"|"X45"|"X46"|"X47")
+            junos_major="12.1"
+            ;;
+
+        "X48")
+            junos_major="12.3"
+            ;;
+
+        "X49")
+            junos_major="15.1"
+            ;;
+        *)
+            echo "unknown version: $version"
+            return
+        esac
+
+        norm_version=$junos_major$major"-"$minor
+        # echo "version = $version"
+        # echo "norm version = $norm_version"
+
+        # go to sandbox
+        sbdir="/volume/build/junos/"$junos_major"/service/"$norm_version
     fi
 
-    echo "$version" | grep -q -i "D"
-    if [[ $? -ne 0 ]]
-    then
-        echo 'missing "D", wrong version?'
-        return
-    fi
-
-    major=$(echo "$version" | sed -e 's/.*\([Xx][0-9]*\).*/\1/')
-    major=$(echo "$major" | sed -e 's/x/X/')
-    minor=$(echo "$version" | sed -e 's/.*\([Dd][0-9]*.*\)/\1/')
-    minor=$(echo "$minor" | sed -e 's/d/D/')
-    #echo "major = $major"
-    #echo "minor = $minor"
-
-    case $major in
-    "X44"|"X45"|"X46"|"X47")
-        junos_major="12.1"
-        ;;
-
-    "X48")
-        junos_major="12.3"
-        ;;
-
-    "X49")
-        junos_major="15.1"
-        ;;
-    *)
-        echo "unknown version: $version"
-        return
-    esac
-
-    norm_version=$junos_major$major"-"$minor
-    # echo "version = $version"
-    # echo "norm version = $norm_version"
-
-    # go to sandbox
-    sbdir="/volume/build/junos/"$junos_major"/service/"$norm_version
     echo "$ cd $sbdir"
     cd "$sbdir"
     echo "$ pwd"
@@ -306,8 +320,17 @@ JDEBUG:
 -------
 /volume/fsgtools/bin/jdebug
 -p srx-ffp | srx-700e | srx-mr ./localhost.srxpfe.3516.1463780517.core.tgz
--l /homes/ssd-builder/ngsrx-yocto-daily/DEV_X_151_X49_BRANCH/2016-05-18.0/srx-ffp/sandbox/Linux-Sandbox/DEV_X_151_X49_BRANCH/  "
+-l /homes/ssd-builder/ngsrx-yocto-daily/DEV_X_151_X49_BRANCH/2016-05-18.0/srx-ffp/sandbox/Linux-Sandbox/DEV_X_151_X49_BRANCH/
 
+Use below if /var/tmp/ storage is inefficient.
+jdebug-tvp-big-tmp-storage 
+
+gdb /homes/ssd-builder/ngsrx-yocto-daily/JUNOS_151_X49_D110_BRANCH/BUILD/srx-700e/sandbox/Linux-Sandbox/JUNOS_151_X49_D110_BRANCH/obj-x86-srx-700e/BUILD/srxpfe-1.0-1/srxp
+fe localhost.bcmLINK.0.4156.1526482204.core
+
+KSYNCD JDEBUG:
+--------------
+/volume/labtools/kernel/tools/ksyncdebugger/ksyncdebugger.sh -k ksyncd.core "
     echo "$alldirs"
 }
 
