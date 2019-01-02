@@ -62,11 +62,18 @@ ce-srx1400-3.spglab.juniper.net
 ce-srx4100-1
 ce-srx4200-1
 
+ce-srx4600-01
+ce-srx4600-02
+
 ce-ex4200-2
 ce-ex4500-1
 ce-ex4500-2
 ce-ex4500-3
 ce-ex4500-4
+
+NFX:
+nfx-150-01-fxp0.spglab.juniper.net
+nfx-150-02-fxp0.spglab.juniper.net
 
 utm-5600-01
 utm-5600-02
@@ -93,5 +100,7 @@ zekrom.spglab.juniper.net
 beefbert.spglab.juniper.net
 nutterbutter2.spglab.juniper.net
 
+
 china-spgtftp.juniper.net
+
 
