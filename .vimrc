@@ -50,7 +50,10 @@ Plugin 'scrooloose/syntastic'
 Plugin 'kien/ctrlp.vim'
 
 " vim cscope
-" Plugin 'vim-scripts/cscope.vim'
+Plugin 'vim-scripts/cscope.vim'
+
+" vim indent object for Python
+Plugin 'michaeljsmith/vim-indent-object'
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
@@ -73,7 +76,11 @@ set t_Sf=[3%p1%dm
 color desert
 
 " Use the OS clipboard by default (on versions compiled with `+clipboard`)
-set clipboard=unnamed
+" Only when TMUX is not used, see below:
+" https://stackoverflow.com/questions/11404800/fix-vim-tmux-yank-paste-on-unnamed-register
+if $TMUX == ''
+    set clipboard+=unnamed
+endif
 
 " Enhance command-line completion
 set wildmenu
