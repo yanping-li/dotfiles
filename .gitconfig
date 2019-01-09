@@ -200,6 +200,6 @@
 	insteadOf = "gist:"
 [user]
 	name = Yanping Li
-	email = [liyanping@gmail.com]
+	email = liyanping@gmail.com
 [branch]
 	autosetuprebase = always
