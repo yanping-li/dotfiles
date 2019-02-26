@@ -300,6 +300,7 @@ flowd branch                    obj-pfe/pfe/obj-flowd-octeon-srx/flowd_octeon_hm
                                 obj-octeon-static/pfe/obj-flowd-octeon-srx/flowd-octeon/
                                 obj-octeon-static/pfe/obj-flowd-octeon-srx/flowd-octeon-hm/
 flowd jsr                       obj-i386/pfe/obj-flowd2/flowd2/flowd
+flowd SPC3                      obj/wrl7srx/amd64/pfe/obj-flowd-spc3/flowd_spc3.elf
 
 NSD RE 1K3K                     obj-powerpc-usp/usp/usr.sbin/nsd/nsd
 NSD RE branch                   obj-octeon-usp/usp/usr.sbin/nsd/nsd
@@ -324,6 +325,12 @@ JDEBUG:
 
 Use below if /var/tmp/ storage is inefficient.
 jdebug-tvp-big-tmp-storage 
+
+GDB and sysroot:
+----------------
+/volume/publish/dev/wrlinux/v6/linux-tvp/wrl-2015-05-31/sysroots/x86_64-wrlinuxsdk-linux/usr/bin/x86_64-wrs-linux/x86_64-wrs-linux-gdb /homes/ssd-builder/ngsrx-yocto-daily/JUNOS_151_X49_D60_BRANCH/production/LATEST/srx-700e/sandbox/Linux-Sandbox/JUNOS_151_X49_D60_BRANCH/obj-x86-srx-700e/BUILD/srxpfe-1.0-1/srxpfe localhost.srxpfe.17000.1499687891.core
+set sysroot:
+/homes/ssd-builder/ngsrx-yocto-kernel/JUNOS_181_R3_BRANCH/production/2018-08-21.1/wrl6/srx_x86_64/build-srx-700e/x86-64/bitbake_build/tmp/sysroots/intel-x86-64/
 
 gdb /homes/ssd-builder/ngsrx-yocto-daily/JUNOS_151_X49_D110_BRANCH/BUILD/srx-700e/sandbox/Linux-Sandbox/JUNOS_151_X49_D110_BRANCH/obj-x86-srx-700e/BUILD/srxpfe-1.0-1/srxp
 fe localhost.bcmLINK.0.4156.1526482204.core
