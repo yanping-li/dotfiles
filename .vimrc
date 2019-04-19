@@ -50,10 +50,13 @@ Plugin 'scrooloose/syntastic'
 Plugin 'kien/ctrlp.vim'
 
 " vim cscope
-Plugin 'vim-scripts/cscope.vim'
+"Plugin 'vim-scripts/cscope.vim'
 
 " vim indent object for Python
 Plugin 'michaeljsmith/vim-indent-object'
+
+" vim-go
+Plugin 'fatih/vim-go'
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
