@@ -335,6 +335,10 @@ set sysroot:
 gdb /homes/ssd-builder/ngsrx-yocto-daily/JUNOS_151_X49_D110_BRANCH/BUILD/srx-700e/sandbox/Linux-Sandbox/JUNOS_151_X49_D110_BRANCH/obj-x86-srx-700e/BUILD/srxpfe-1.0-1/srxp
 fe localhost.bcmLINK.0.4156.1526482204.core
 
+Directory with depth > 9:
+-------------------------
+./pfe/usp/rt/applications/voip/sip/stack/sip/core
+
 KSYNCD JDEBUG:
 --------------
 /volume/labtools/kernel/tools/ksyncdebugger/ksyncdebugger.sh -k ksyncd.core "
