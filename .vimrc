@@ -180,6 +180,10 @@ set showcmd
 " Start scrolling 2 lines before the horizontal window border
 set scrolloff=2
 
+" When splitting a window, put the new window below/right of current one
+set splitbelow
+set splitright
+
 " set at the end of .vimrc file
 set secure
 
