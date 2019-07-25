@@ -198,6 +198,7 @@ function cdsb() {
 # Login to remote server/dut
 function goto() {
     local name=$1
+    local app='ssh'
     local user_at_server=''
     local match=0
     local is_d
@@ -226,6 +227,7 @@ function goto() {
         then
             match=1
             user_at_server='lexli@contrail-ubm-lexli.ccp.juniper.net'
+            app='mosh'
         fi
     fi
 
@@ -258,7 +260,8 @@ function goto() {
     else
         # ssh to server
         echo "ssh $user_at_server"
-        ssh $user_at_server
+        #ssh $user_at_server
+        $app $user_at_server
     fi
 
     return
