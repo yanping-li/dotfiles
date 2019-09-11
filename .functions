@@ -227,7 +227,8 @@ function goto() {
         then
             match=1
             user_at_server='lexli@contrail-ubm-lexli.ccp.juniper.net'
-            app='mosh'
+            #app='mosh'
+            app='ssh'
         fi
     fi
 
@@ -259,8 +260,7 @@ function goto() {
         echo 'Is "'$name'" a good server name'
     else
         # ssh to server
-        echo "ssh $user_at_server"
-        #ssh $user_at_server
+        echo "$app $user_at_server"
         $app $user_at_server
     fi
 
