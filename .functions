@@ -40,18 +40,27 @@ function ta() {
 }
 
 
-# Usage example: cdpr 1234567
-# If PR directory does not exist, create it, and then go to PR directory
+# Usage example:
+#   cdpr                Get PR-number from current tmux session name, and then change directory to this PR.
+#   cdpr 1234567        Change directory to PR1234567.
+# In both cases, if PR directory does not exist, create it and go to PR directory
 function cdpr() {
-    local PR=$1
-    local first_attempt="/homes/lexli/pr/$PR" 
-    local second_attempt="/homes/lexli/d070/$PR" 
+    local PR=""
+    local first_attempt="" 
+    local second_attempt="" 
     local dir_exist=0
-    local dir_name=$second_attempt
+    local dir_name=""
 
-    if [[ $# -ne 1 ]] ; then
-        echo "Usage: cdpr <pr-number>"
+    if [[ $# -gt 1 ]] ; then
+        echo "Usage: cdpr [pr-number]"
         return
+    fi
+
+    PR=$1
+    echo "first arg: $PR"
+    if [[ $# == 0 ]] ; then
+        PR=$(tmux list-sessions | grep "(attached)" | grep -oh "^[0-9]*")
+        echo "default: $PR"
     fi
 
     # make sure it's a PR number
@@ -62,6 +71,11 @@ function cdpr() {
         return 0
     fi
  
+    first_attempt="/homes/lexli/pr/$PR" 
+    second_attempt="/homes/lexli/d070/$PR" 
+    dir_exist=0
+    dir_name=$second_attempt
+
     # check if PR exists in first PR dir
     if [ -e $first_attempt ]
     then
