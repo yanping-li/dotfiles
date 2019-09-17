@@ -57,10 +57,8 @@ function cdpr() {
     fi
 
     PR=$1
-    echo "first arg: $PR"
     if [[ $# == 0 ]] ; then
         PR=$(tmux list-sessions | grep "(attached)" | grep -oh "^[0-9]*")
-        echo "default: $PR"
     fi
 
     # make sure it's a PR number
