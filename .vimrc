@@ -57,6 +57,8 @@ Plugin 'michaeljsmith/vim-indent-object'
 
 " vim-go
 Plugin 'fatih/vim-go'
+let g:go_def_mode='gopls'
+let g:go_info_mode='gopls'
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
@@ -196,4 +198,14 @@ if has("autocmd")
     " Treat .md files as Markdown
     autocmd BufNewFile,BufRead *.md setlocal filetype=markdown
 endif
+
+" Open QuickFix window automatically after performing grep
+augroup quickfix
+    autocmd!
+    autocmd QuickFixCmdPost [^l]* cwindow
+    autocmd QuickFixCmdPost l* lwindow
+augroup END
+
+" Prevent the 'Press ENTER or type command to continue' after performing grep.
+command! -nargs=+ Grep execute 'silent grep!' <q-args> | cw | redraw!
 
