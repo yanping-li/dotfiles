@@ -59,6 +59,8 @@ Plugin 'michaeljsmith/vim-indent-object'
 Plugin 'fatih/vim-go'
 let g:go_def_mode='gopls'
 let g:go_info_mode='gopls'
+" use quickfix list instead of location list
+let g:go_list_type = "quickfix"
 
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
