@@ -48,6 +48,7 @@ function cdpr() {
     local PR=""
     local first_attempt="" 
     local second_attempt="" 
+    local third_attempt=""
     local dir_exist=0
     local dir_name=""
 
@@ -71,8 +72,9 @@ function cdpr() {
  
     first_attempt="/homes/lexli/pr/$PR" 
     second_attempt="/homes/lexli/d070/$PR" 
+    third_attempt="/homes/lexli/d076/PR/$PR"
     dir_exist=0
-    dir_name=$second_attempt
+    dir_name=$third_attempt
 
     # check if PR exists in first PR dir
     if [ -e $first_attempt ]
@@ -93,6 +95,17 @@ function cdpr() {
             # echo "$second_attempt exist"
             dir_exist=1
             dir_name=$second_attempt
+        fi
+    fi
+
+    # check if PR exists in third PR dir
+    if [ -e $third_attempt ]
+    then
+        if [ -d $thrid_attempt ]
+        then
+            # echo "$third_attempt exist"
+            dir_exist=1
+            dir_name=$third_attempt
         fi
     fi
 
