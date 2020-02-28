@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
 
-PS1="\h$ "
+vols=""
+if [ $(hostname) = "editsb" ]; then
+    if [ -d "/baas/lexli/" ]; then
+        for vol in /baas/lexli/*/; do
+            vols="$vols-$(basename $vol)"
+        done
+    fi
+fi
+PS1="$(hostname)$vols$ "
 export PS1;
