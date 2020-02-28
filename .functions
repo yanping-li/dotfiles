@@ -74,7 +74,7 @@ function cdpr() {
     second_attempt="/homes/lexli/d070/$PR" 
     third_attempt="/homes/lexli/d076/PR/$PR"
     dir_exist=0
-    dir_name=$third_attempt
+    dir_name=$first_attempt
 
     # check if PR exists in first PR dir
     if [ -e $first_attempt ]
