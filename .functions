@@ -244,6 +244,48 @@ function goto() {
         user_at_server='lexli@svl-junos-'$name'.juniper.net'
     fi
  
+    # is qnc?
+    if [ $match -eq 0 ]
+    then
+        echo "$name" | grep -q 'qnc'
+        if [ $? -eq 0 ]
+        then
+            match=1
+            user_at_server='lexli@qn-baas-lb.juniper.net'
+            app='ssh'
+        fi
+    fi
+ 
+    # is pr?
+    if [ $match -eq 0 ]
+    then
+        echo "$name" | grep -q 'pr'
+        if [ $? -eq 0 ]
+        then
+            match=1
+            # start local port forwarding, and ignore error message
+            ssh -f -N -L 2022:10.20.120.26:22 qnc-baas-sshjmp.juniper.net 2> /dev/null
+            # '-A' to enable agent forwarding
+            user_at_server='-A localhost -p 2022'
+            app='ssh'
+        fi
+    fi
+
+    # is etc?
+    if [ $match -eq 0 ]
+    then
+        echo "$name" | grep -q 'etc'
+        if [ $? -eq 0 ]
+        then
+            match=1
+            # start local port forwarding, and ignore error message
+            ssh -f -N -L 2023:10.20.120.27:22 qnc-baas-sshjmp.juniper.net 2> /dev/null
+            # '-A' to enable agent forwarding
+            user_at_server='-A localhost -p 2023'
+            app='ssh'
+        fi
+    fi
+
     # is ubm?
     if [ $match -eq 0 ]
     then
@@ -252,7 +294,6 @@ function goto() {
         then
             match=1
             user_at_server='lexli@contrail-ubm-lexli.ccp.juniper.net'
-            #app='mosh'
             app='ssh'
         fi
     fi
