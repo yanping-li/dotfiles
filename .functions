@@ -70,7 +70,7 @@ function cdpr() {
         return 0
     fi
  
-    first_attempt="/homes/lexli/pr/$PR" 
+    first_attempt="/homes/lexli/prs/$PR" 
     second_attempt="/homes/lexli/d070/$PR" 
     third_attempt="/homes/lexli/d076/PR/$PR"
     dir_exist=0
