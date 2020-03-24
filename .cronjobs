@@ -62,6 +62,5 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 # Send out email remainder for sending out weekly report 10am every Monday.
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh
 
-# Reload cron jobs on reboot.
-#@reboot mail -s "System has been rebooted, current time $(date)" lexli@juniper.net
-* * * * * mail -s "System has been rebooted, host: $(hostname), current time: $(date)" lexli@juniper.net
+# Send email on system reboot
+@reboot mail -s "System has been rebooted, host: $(hostname), current time: $(date)" lexli@juniper.net
