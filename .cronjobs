@@ -1,0 +1,67 @@
+
+# Usage:
+#
+# crontab <cronjobs>                Load cron jobs from a file.
+# crontab -u <user> <cronjobs>      Load cron jobs from a file for user.
+# crontab -l                        List current cron jobs.
+# crontab -e                        Edit cron jobs for current user.
+# crontab -l > <cronjobs>           Backup cron jobs to a file.
+#
+# Examples:
+#
+# Example of job definition:
+# .---------------- minute (0 - 59)
+# |  .------------- hour (0 - 23)
+# |  |  .---------- day of month (1 - 31)
+# |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+# |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+# |  |  |  |  |
+# *  *  *  *  * user-name  command to be executed
+#
+# Every hour within [09, 18].
+# 00 09-18 * * * CMD
+#
+# Hour 09 and hour 21.
+# 00 09,21 * * * CMD
+#
+# Every working hour in weekday.
+# 00 09-17 * * 1-5 CMD
+#
+# Every 10 minutes.
+# */10 * * * * CMD
+#
+# Midnight of every 1st, 10th, 20th day of month.
+# 00 00 1,10,20 * * CMD
+#
+# Every 30 seconds.
+# * * * * * CMD
+# * * * * * sleep 30; CMD
+#
+# Root update packages every month.
+# 0 12 1 * * root apt-get -y update
+#
+# Keyword    Equivalent
+# @yearly    0 0 1 1 *
+# @daily     0 0 * * *
+# @hourly    0 * * * *
+# @reboot    Run at startup.
+
+
+# Set up environment
+#HOME=user’s-home-directory
+#LOGNAME=user’s-login-id
+SHELL=/bin/bash
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+#MAILTO=lexli@juniper.net
+
+# Juniper Networks
+
+# Send out email remainder for sending out weekly report 10am every Monday.
+00 10 * * mon mail -s "Send out weekly report." lexli@juniper.net
+
+# Send out email remainder for sending out weekly report 10am every Monday.
+*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh
+
+# Reload cron jobs on reboot.
+#@reboot mail -s "System has been rebooted, current time $(date)" lexli@juniper.net
+* * * * * mail -s "System has been rebooted, host: $(hostname), current time: $(date)" lexli@juniper.net
