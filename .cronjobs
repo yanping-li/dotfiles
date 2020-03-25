@@ -59,7 +59,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 # Send out email remainder for sending out weekly report 10am every Monday.
 00 10 * * mon mail -s "Send out weekly report." lexli@juniper.net
 
-# Send out email remainder for sending out weekly report 10am every Monday.
+# Send out email for new PR or PR is marked 'reproducible'.
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh
 
 # Send email on system reboot
