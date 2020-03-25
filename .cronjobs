@@ -51,7 +51,7 @@
 #HOME=user’s-home-directory
 #LOGNAME=user’s-login-id
 SHELL=/bin/bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/bin:/volume/buildtools/bin:/volume/labtools/bin:/volume/ssd-tools/bin:/volume/nxsw-CVS/bin:/volume/baas_devops/bin
 #MAILTO=lexli@juniper.net
 
 # Juniper Networks
@@ -60,7 +60,8 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 00 10 * * mon mail -s "Send out weekly report." lexli@juniper.net
 
 # Send out email for new PR or PR is marked 'reproducible'.
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh
+*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR
+*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_REPRODUCIBLE
 
 # Send email on system reboot
 @reboot mail -s "System has been rebooted, host: $(hostname), current time: $(date)" lexli@juniper.net
