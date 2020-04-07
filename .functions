@@ -217,6 +217,23 @@ function cdsb() {
     pwd
 }
 
+function __start_ssh_local_forwarding_if_neccessary() {
+    pod=$1
+    local_port=$2
+    pod_ip="$(ssh lexli@qn-baas-lb.juniper.net '/volume/baas_devops/bin/baas lspod' 2>&1 | grep 'edit' | awk '{ print $4, $2 }' | grep $pod | grep -v 'grep')"
+    ip="$(echo $pod_ip | awk '{ print $2 }')"
+
+    # check if local forwarding exists already
+    ps aux | grep 'ssh' | grep " $local_port:$ip" | grep 'qnc-baas-sshjmp' | grep -q -v 'grep'
+    ret=$?
+
+    if [ "$ret" -eq 1 ]; then
+        # start local port forwarding, and ignore error message
+        echo "Start ssh local port forwarding"
+        ssh -f -N -L $local_port:$ip:22 qnc-baas-sshjmp.juniper.net 2> /dev/null
+    fi
+}
+
 # Usage example: goto d070
 # Usage example: goto ubm
 # Usage example: goto ce-srx3400-1
@@ -263,10 +280,9 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            # start local port forwarding, and ignore error message
-            ssh -f -N -L 2022:10.20.120.26:22 qnc-baas-sshjmp.juniper.net 2> /dev/null
+            __start_ssh_local_forwarding_if_neccessary 'pr' 10010
             # '-A' to enable agent forwarding
-            user_at_server='-A localhost -p 2022'
+            user_at_server='-A localhost -p 10010'
             app='ssh'
         fi
     fi
@@ -278,10 +294,23 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            # start local port forwarding, and ignore error message
-            ssh -f -N -L 2023:10.20.120.27:22 qnc-baas-sshjmp.juniper.net 2> /dev/null
+            __start_ssh_local_forwarding_if_neccessary 'etc' 10020
             # '-A' to enable agent forwarding
-            user_at_server='-A localhost -p 2023'
+            user_at_server='-A localhost -p 10020'
+            app='ssh'
+        fi
+    fi
+
+    # is build?
+    if [ $match -eq 0 ]
+    then
+        echo "$name" | grep -q 'build'
+        if [ $? -eq 0 ]
+        then
+            match=1
+            __start_ssh_local_forwarding_if_neccessary 'build' 10030
+            # '-A' to enable agent forwarding
+            user_at_server='-A localhost -p 10030'
             app='ssh'
         fi
     fi
