@@ -57,7 +57,11 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/
 # Juniper Networks
 
 # Send out email remainder for sending out weekly report 10am every Monday.
-00 10 * * mon mail -s "Send out weekly report." lexli@juniper.net
+00 10 * * mon mail -s "-- Send out weekly report. --" lexli@juniper.net
+
+# Update CVS repository 10am every Sunday.
+00 10 * * sun /homes/lexli/git/cvs/script-to-update-whole-cvs-repository
+00 10 * * sun mail -s "CVS repository updated." lexli@juniper.net
 
 # Send out email for new PR or PR is marked 'reproducible'.
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR
