@@ -315,6 +315,18 @@ function goto() {
         fi
     fi
 
+    # is jtac?
+    if [ $match -eq 0 ]
+    then
+        echo "$name" | grep -q 'jtac'
+        if [ $? -eq 0 ]
+        then
+            match=1
+            user_at_server='lexli@svl-jtac-lnx01.juniper.net'
+            app='ssh'
+        fi
+    fi
+
     # is ubm?
     if [ $match -eq 0 ]
     then
