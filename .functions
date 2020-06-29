@@ -253,11 +253,11 @@ function cdsb() {
     pwd
 }
 
-function __start_ssh_local_forwarding_if_neccessary() {
+function __start_ssh_local_forwarding_if_necessary() {
     pod=$1
     local_port=$2
-    pod_ip="$(ssh lexli@qn-baas-lb.juniper.net '/volume/baas_devops/bin/baas lspod' 2>&1 | grep 'edit' | awk '{ print $4, $2 }' | grep $pod | grep -v 'grep')"
-    ip="$(echo $pod_ip | awk '{ print $2 }')"
+    pod_ip="$(ssh lexli@qn-baas-lb.juniper.net '/volume/baas_devops/bin/baas lspod' 2>&1 | grep '[0-9,a-z]\+-[0-9,a-z]\+-[0-9,a-z]\+' | awk '{ print $2, $4 }' | grep $pod | grep -v 'grep')"
+    ip="$(echo $pod_ip | awk '{ print $1 }')"
 
     # check if local forwarding exists already
     ps aux | grep 'ssh' | grep " $local_port:$ip" | grep 'qnc-baas-sshjmp' | grep -q -v 'grep'
@@ -316,7 +316,7 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            __start_ssh_local_forwarding_if_neccessary 'pr' 10010
+            __start_ssh_local_forwarding_if_necessary 'pr' 10010
             # '-A' to enable agent forwarding
             user_at_server='-A localhost -p 10010'
             app='ssh'
@@ -330,7 +330,7 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            __start_ssh_local_forwarding_if_neccessary 'etc' 10020
+            __start_ssh_local_forwarding_if_necessary 'etc' 10020
             # '-A' to enable agent forwarding
             user_at_server='-A localhost -p 10020'
             app='ssh'
@@ -344,7 +344,7 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            __start_ssh_local_forwarding_if_neccessary 'build' 10030
+            __start_ssh_local_forwarding_if_necessary 'build' 10030
             # '-A' to enable agent forwarding
             user_at_server='-A localhost -p 10030'
             app='ssh'
