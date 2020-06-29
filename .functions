@@ -72,7 +72,9 @@ function cdpr() {
  
     first_attempt="/homes/lexli/prs/$PR" 
     second_attempt="/homes/lexli/d070/$PR" 
+    second_attempt_="/baas/lexli/storage-01/PR/$PR" 
     third_attempt="/homes/lexli/d076/PR/$PR"
+    third_attempt_="/baas/lexli/storage-02/PR/$PR"
     dir_exist=0
     dir_name=$first_attempt
 
@@ -87,25 +89,59 @@ function cdpr() {
         fi
     fi
 
-    # check if PR exists in second PR dir
-    if [ -e $second_attempt ]
+    if [ $dir_exist -ne 1 ]
     then
-        if [ -d $second_attempt ]
+        # check if PR exists in second PR dir
+        if [ -e $second_attempt_ ]
         then
-            # echo "$second_attempt exist"
-            dir_exist=1
-            dir_name=$second_attempt
+            if [ -d $second_attempt_ ]
+            then
+                # echo "$second_attempt exist"
+                dir_exist=1
+                dir_name=$second_attempt_
+            fi
         fi
     fi
 
-    # check if PR exists in third PR dir
-    if [ -e $third_attempt ]
+    if [ $dir_exist -ne 1 ]
     then
-        if [ -d $thrid_attempt ]
+        # check if PR exists in second PR dir
+        if [ -e $second_attempt ]
         then
-            # echo "$third_attempt exist"
-            dir_exist=1
-            dir_name=$third_attempt
+            if [ -d $second_attempt ]
+            then
+                # echo "$second_attempt exist"
+                dir_exist=1
+                dir_name=$second_attempt
+            fi
+        fi
+    fi
+
+    if [ $dir_exist -ne 1 ]
+    then
+        # check if PR exists in third PR dir
+        if [ -e $third_attempt_ ]
+        then
+            if [ -d $thrid_attempt_ ]
+            then
+                # echo "$third_attempt exist"
+                dir_exist=1
+                dir_name=$third_attempt_
+            fi
+        fi
+    fi
+
+    if [ $dir_exist -ne 1 ]
+    then
+        # check if PR exists in third PR dir
+        if [ -e $third_attempt ]
+        then
+            if [ -d $thrid_attempt ]
+            then
+                # echo "$third_attempt exist"
+                dir_exist=1
+                dir_name=$third_attempt
+            fi
         fi
     fi
 
