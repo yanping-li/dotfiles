@@ -65,7 +65,7 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/
 
 # Send out email for new PR or PR is marked 'reproducible'.
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR_NO_ACE
+*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_NO_ACE
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_REPRODUCIBLE
 
 # Send email on system reboot
