@@ -110,3 +110,27 @@ huangshan01.spglab.juniper.net
 china-spgtftp.juniper.net
 
 
+Servers from where CNRD home directory can be accessed:
+---------------
+svl-s2b-ubm-p01
+svl-s2b-ubm-p03
+svl-s2b-ubm-p03
+svl-s2b-ubm-p04
+
+
+SSH jump servers:
+---------------
+qceng-dmz-01.juniper.net
+qceng-dmz-02.juniper.net
+qceng-dmz-03.juniper.net
+
+sveng-dmz-01.juniper.net
+sveng-dmz-02.juniper.net
+sveng-dmz-03.juniper.net
+
+wfeng-dmz-01.juniper.net
+wfeng-dmz-02.juniper.net
+
+bneng-dmz-01.juniper.net
+bneng-dmz-02.juniper.net
+bneng-dmz-03.juniper.net
