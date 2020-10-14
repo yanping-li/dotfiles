@@ -92,9 +92,6 @@ endif
 " Enhance command-line completion
 set wildmenu
 
-" for code copy/paste
-set paste
-
 " Allow backspace in insert mode
 set backspace=indent,eol,start
 
