@@ -169,6 +169,11 @@ set ruler
 " Don't show intro message when starting vim
 set shortmess=atI
 
+" Toggle paste mode
+nnoremap <F2> :set invpaste paste?<CR>
+set pastetoggle=<F2>
+set showmode
+
 " Show the current mode
 set showmode
 
