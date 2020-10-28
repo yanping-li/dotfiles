@@ -67,6 +67,7 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_NO_ACE
 */10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_REPRODUCIBLE
+*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_NOT_ASSIGNED
 
 # Get output of 'baas lspod' every minute.
 */1 * * * * baas lspod -l > ~/dev/lspod.txt
