@@ -1,3 +1,21 @@
+
+ENG DMZ: SSH Jump Host Servers to access CNRD DEV home directory
+QNC: VIP access: qcengdmzlb.juniper.net
+qceng-dmz-01
+qceng-dmz-02
+qceng-dmz-03
+BNG: VIP access: bnengdmzlb.juniper.net
+bneng-dmz-01
+bneng-dmz-02
+bneng-dmz-03
+SVL: VIP access: svengdmzlb.juniper.net
+sveng-dmz-01
+sveng-dmz-02
+sveng-dmz-03
+WF: VIP access: wfengdmzlb.juniper.net
+wfeng-dmz-01
+wfeng-dmz-02
+
 bng-junos-d035.juniper.net
 
 svl-junos-d070.juniper.net
