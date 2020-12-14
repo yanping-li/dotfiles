@@ -328,7 +328,8 @@ function goto() {
         if [ $? -eq 0 ]
         then
             match=1
-            user_at_server='lexli@svl-jtac-lnx01.juniper.net'
+            # svl-jtac-lnx05/svl-jtac-lnx07
+            user_at_server='lexli@svl-jtac-lnx07.juniper.net'
             app='ssh'
         fi
     fi
