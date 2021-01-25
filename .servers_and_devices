@@ -41,6 +41,15 @@ contrail-ubm-lexli.ccp.juniper.net
 contrail-ubm-kevinwang.ccp.juniper.net
 
 qnc-baas-shell.juniper.net
+qnbaasshell6.juniper.net
+qnbaasshell5.juniper.net
+qnbaasshell4.juniper.net
+qnbaasshell3.juniper.net
+
+POD external IP:
+prs    10.47.3.194
+etc    10.47.3.245
+
 
 ce-altor01.spglab.juniper.net                                   vmware
 ce-altor02.spglab.juniper.net                                   vmware
