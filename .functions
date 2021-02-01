@@ -267,14 +267,14 @@ function goto() {
         user_at_server='lexli@svl-junos-'$name'.juniper.net'
     fi
  
-    # is qnc?
+    # is shell?
     if [ $match -eq 0 ]
     then
-        echo "$name" | grep -q 'qnc'
+        echo "$name" | grep -q 'shell'
         if [ $? -eq 0 ]
         then
             match=1
-            user_at_server='lexli@qn-baas-lb.juniper.net'
+            user_at_server='lexli@qnbaas'$name'.juniper.net'
             app='ssh'
         fi
     fi
