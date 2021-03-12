@@ -161,3 +161,12 @@ wfeng-dmz-02.juniper.net
 bneng-dmz-01.juniper.net
 bneng-dmz-02.juniper.net
 bneng-dmz-03.juniper.net
+
+
+# Lab tools
+
+Checking reservation of router
+/volume/labtools/bin/res sh <router name>  
+Control power to router
+/volume/labtools/labadmin/bin/ltPwr {--status|on|off} <router name>
+
