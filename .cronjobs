@@ -58,6 +58,11 @@ PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/
 
 # Send out email remainder for sending out weekly report 10am every Monday.
 00 10 * * mon mail -s "-- Send out weekly report. --" lexli@juniper.net
+00 11 * * mon mail -s "-- Have you sent out weekly report? --" lexli@juniper.net
+00 16 * * mon mail -s "-- Have you sent out weekly report? --" lexli@juniper.net
+
+# Run script to check PRs not updated x days and send out reminder.
+00 07 * * * /homes/lexli/dev/script-bash/prs-not-updated-for-x-days/pr-no-update 3
 
 # Update CVS repository 10am every Sunday.
 00 10 * * sun /homes/lexli/git/cvs/script-to-update-whole-cvs-repository
