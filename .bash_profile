@@ -55,3 +55,6 @@ complete -o "nospace" -W "Contacts Calendar Dock Finder Mail Safari iTunes Syste
 
 # Suppress 'The default interactive shell is now zsh ...'
 export BASH_SILENCE_DEPRECATION_WARNING=1
+
+# brew env
+eval "$(/opt/homebrew/bin/brew shellenv)"
