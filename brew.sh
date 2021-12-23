@@ -101,5 +101,10 @@ brew install vbindiff
 brew install webkit2png
 brew install zopfli
 
+# Install tools
+brew install tmux
+brew install python3
+brew install tldr
+
 # Remove outdated versions from the cellar.
 brew cleanup
