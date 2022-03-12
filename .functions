@@ -31,7 +31,7 @@ function ta() {
 
     if [ $match -eq 1 ]
     then
-        tmux attach -t "$matched_name"
+        tmux attach -d -t "$matched_name"
     else
         tmux new -s "$pattern"
     fi
