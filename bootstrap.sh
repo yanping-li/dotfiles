@@ -8,10 +8,11 @@ function copyAndApplySysctl() {
 	echo "Copy and apply sysctl config ..."
     unameOut="$(uname -s)"
     case "${unameOut}" in
-        Linux*)
-        sudo cp sysctl/sysctl.conf.linux /etc/sysctl.conf
-        sudo sysctl -p
-        ;;
+
+#       Linux*)
+#       sudo cp sysctl/sysctl.conf.linux /etc/sysctl.conf
+#       sudo sysctl -p
+#       ;;
 
         Darwin*)
         sudo cp sysctl/sysctl.conf.osx /etc/sysctl.conf
