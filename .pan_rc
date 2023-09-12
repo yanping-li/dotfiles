@@ -1,0 +1,8 @@
+pathbase=/usr/kerberos/bin:$PATH
+
+# Source global definitions
+[ -f /etc/bashrc ] && . /etc/bashrc
+[ -f /usr/local/env/bashrc ] && . /usr/local/env/bashrc
+
+# defaults
+workspace
