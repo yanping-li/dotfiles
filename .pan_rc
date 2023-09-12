@@ -4,5 +4,24 @@ pathbase=/usr/kerberos/bin:$PATH
 [ -f /etc/bashrc ] && . /etc/bashrc
 [ -f /usr/local/env/bashrc ] && . /usr/local/env/bashrc
 
-# defaults
-workspace
+function cdsb()
+{
+	local sb=$1
+
+	if [ $# -eq 0 ]; then
+		echo "Usage: cdsb <sandbox>"
+	elif [ ! -d ~/pan/$sb ]; then
+		echo "\"~/pan/$sb\" does not exist!"
+		echo "------ Existing sandboxes ------"
+		ls -1 ~/pan
+		echo "--------------------------------"
+	else
+		p4client hqna2
+		pandir ~/pan
+		usever $sb
+		cd ~/pan/$sb
+		echo "PANDIR="$PANDIR
+		echo "PAN_VER="$PAN_VER
+		echo "PAN_BUILD_DIR="$PAN_BUILD_DIR
+	fi;
+}
