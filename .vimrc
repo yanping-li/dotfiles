@@ -125,17 +125,11 @@ syntax on
 " Make tab as wide as 4 spaces
 set tabstop=4
 
-let uname = substitute(system('uname'), '\n', '', '')
-if uname == 'Linux'
-    " 80 characters per line
-    set textwidth=80
-else
-    " expand TAB into spaces
-    set expandtab
+" expand TAB into spaces
+set expandtab
 
-    " 100 characters per line
-    set textwidth=100
-endif
+" 100 characters per line
+set textwidth=100
 
 " c style indent
 set cindent
