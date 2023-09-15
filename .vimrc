@@ -62,6 +62,9 @@ let g:go_info_mode='gopls'
 " use quickfix list instead of location list
 let g:go_list_type = "quickfix"
 
+" Supress go version warning
+let g:go_version_warning = 0
+
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
 filetype plugin indent on    " required
