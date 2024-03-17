@@ -24,7 +24,7 @@ autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTreeType") && b:NERDTree
 map <C-n> :NERDTreeToggle<CR>
 map <Leader>n :NERDTree %:p:h<CR>
 
-Plugin 'Valloric/YouCompleteMe'
+"Plugin 'Valloric/YouCompleteMe'
 
 Plugin 'jiangmiao/auto-pairs'
 
@@ -172,10 +172,14 @@ set ruler
 " Don't show intro message when starting vim
 set shortmess=atI
 
-" Toggle paste mode
+" Toggle paste mode, below two lines do the same job, one line should be fine
 nnoremap <F2> :set invpaste paste?<CR>
 set pastetoggle=<F2>
-set showmode
+
+" On macOS, open the current file in TextEdit
+if has("mac")
+        nnoremap <F3> :!open -a TextEdit %<CR>
+endif
 
 " Show the current mode
 set showmode
