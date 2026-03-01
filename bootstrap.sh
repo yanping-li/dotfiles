@@ -22,6 +22,23 @@ function copyAndApplySysctl() {
 	echo "Done."
 }
 
+function setupTmuxPlugins() {
+	echo "Setting up tmux plugins ..."
+	local tpm_dir="$HOME/.tmux/plugins/tpm"
+	if [ ! -d "$tpm_dir" ]; then
+		echo "Installing TPM (Tmux Plugin Manager) ..."
+		git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+	else
+		echo "TPM already installed, updating ..."
+		git -C "$tpm_dir" pull
+	fi
+
+	# Install/update plugins via TPM (works without a running tmux session)
+	echo "Installing tmux plugins ..."
+	"$tpm_dir/bin/install_plugins"
+	echo "Done."
+}
+
 function doIt() {
     git clone https://github.com/gmarik/Vundle.vim.git ~/.vim/bundle/Vundle.vim
 	rsync --exclude ".git/" \
@@ -37,6 +54,7 @@ function doIt() {
 	source ~/.bash_profile;
 
     copyAndApplySysctl;
+    setupTmuxPlugins;
 }
 
 if [ "$1" == "--force" -o "$1" == "-f" ]; then
@@ -51,3 +69,4 @@ fi;
 
 unset doIt;
 unset copyAndApplySysctl;
+unset setupTmuxPlugins;
