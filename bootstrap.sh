@@ -31,6 +31,7 @@ function doIt() {
 		--exclude "README.md" \
 		--exclude "LICENSE-MIT.txt" \
 		--exclude "todo.txt" \
+		--exclude "musttodo.txt" \
         --exclude "sysctl/" \
 		-avh --no-perms . ~;
 	source ~/.bash_profile;
