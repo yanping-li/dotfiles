@@ -199,7 +199,16 @@
 
 	insteadOf = "gist:"
 [user]
-	name =
-	email =
+	# Identity is set via includeIf below based on repo location
+
+[includeIf "gitdir:~/pan/"]
+	path = ~/.gitconfig-work
+
+[includeIf "gitdir:~/git/"]
+	path = ~/.gitconfig-personal
+
+[includeIf "gitdir:~/data/git/"]
+	path = ~/.gitconfig-personal
+
 [branch]
 	autosetuprebase = always
