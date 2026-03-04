@@ -42,7 +42,11 @@ Personal dotfiles for macOS (Bash shell). Files are symlinked/rsynced into `$HOM
 | `.tmux.conf` | tmux config with TPM plugins (tmux-resurrect); vi mode keys |
 | `.ssh/config` | SSH host groups and global options (ForwardAgent, UseKeychain) |
 | `.ssh/rc` | SSH post-login commands (e.g., socket symlinking for agent forwarding in tmux) |
-| `.vimrc` / `.vim/` | Vim config with Vundle plugin manager, Solarized theme |
+| `.vimrc` / `.vim/` | Legacy Vim config (kept, untouched) |
+| `.config/nvim/init.lua` | Neovim entry point: bootstraps lazy.nvim, loads modules |
+| `.config/nvim/lua/settings.lua` | Neovim options, autocmds, colorscheme |
+| `.config/nvim/lua/keymaps.lua` | Neovim key bindings |
+| `.config/nvim/lua/plugins.lua` | lazy.nvim plugin spec (telescope, nvim-tree, treesitter, etc.) |
 | `.gitconfig` | Git settings |
 | `.macos` / `.osx` | macOS system preference automation scripts (run once manually) |
 | `sysctl/` | Kernel tuning configs for macOS and Linux |
@@ -52,4 +56,6 @@ Personal dotfiles for macOS (Bash shell). Files are symlinked/rsynced into `$HOM
 - The default SSH user for all dev servers is `lexli` (set in `.ssh/config`).
 - tmux SSH agent forwarding relies on a symlink at `~/.ssh/ssh_auth_sock` (configured in `.tmux.conf` and `.ssh/rc`).
 - `musttodo.txt` is gitignored; `.extra`, `.path`, and `.user_pass_and_jtac_servers_and_jtac_dirs` are sensitive local-only files.
-- Vim plugins are managed by Vundle (cloned during `bootstrap.sh`); tmux plugins by TPM.
+- Neovim plugins are managed by **lazy.nvim**, which self-bootstraps on first `nvim` launch — no manual setup needed. Config lives in `.config/nvim/lua/plugins.lua`.
+- Vim (`.vimrc`) is kept untouched as a fallback; its plugins used Vundle (now unused).
+- tmux plugins are managed by TPM (bootstrapped by `bootstrap.sh`).

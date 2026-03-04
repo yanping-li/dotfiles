@@ -40,7 +40,8 @@ function setupTmuxPlugins() {
 }
 
 function doIt() {
-    git clone https://github.com/gmarik/Vundle.vim.git ~/.vim/bundle/Vundle.vim
+    # Note: neovim plugins (lazy.nvim) self-bootstrap on first `nvim` launch.
+    # No manual plugin setup needed.
 	rsync --exclude ".git/" \
 		--exclude ".DS_Store" \
 		--exclude ".osx" \
