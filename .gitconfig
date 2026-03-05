@@ -198,8 +198,15 @@
 [url "git://gist.github.com/"]
 
 	insteadOf = "gist:"
-[user]
-	name =
-	email =
+
+[includeIf "gitdir:~/git/"]
+    path = .gitconfig-work
+
+[includeIf "gitdir:~/pan/"]
+    path = .gitconfig-work
+
+[includeIf "gitdir:~/data/git/"]
+	path = .gitconfig-personal
+
 [branch]
 	autosetuprebase = always
