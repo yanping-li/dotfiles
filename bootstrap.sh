@@ -49,6 +49,7 @@ function doIt() {
 		--exclude "README.md" \
 		--exclude "LICENSE-MIT.txt" \
 		--exclude "todo.txt" \
+		--exclude "CLAUDE.md" \
 		--exclude "musttodo.txt" \
         --exclude "sysctl/" \
 		-avh --no-perms . ~;
