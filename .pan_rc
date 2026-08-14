@@ -14,7 +14,6 @@ function cdsb()
 		ls -1 ~/pan
 		echo "--------------------------------"
 	else
-		p4client hqna2
 		pandir ~/pan
 		usever $sb
 		cd ~/pan/$sb
@@ -23,3 +22,4 @@ function cdsb()
 		echo "PAN_BUILD_DIR="$PAN_BUILD_DIR
 	fi;
 }
+
