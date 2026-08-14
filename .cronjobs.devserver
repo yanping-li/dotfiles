@@ -1,2 +1,3 @@
 # Dev server (Ubuntu) cron jobs
 0 0 * * * cd ~/pan/main && git fetch
+0 3 * * 0 nvim --headless "+Lazy! sync" +qa 2>/dev/null
