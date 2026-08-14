@@ -1,8 +1,3 @@
-# Work-specific aliases
-alias gget="wget --user=lexli --ask-password"
-alias jdebug="jdebug --tmp_path ."
-alias findrsi="find . -iname '*rsi*'"
-
 # Source global definitions
 [ -f /etc/bashrc ] && . /etc/bashrc
 [ -f /usr/local/env/bashrc ] && . /usr/local/env/bashrc
