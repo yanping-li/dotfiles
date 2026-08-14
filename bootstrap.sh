@@ -50,6 +50,8 @@ function generateCronjobs() {
 function deployNvim() {
     echo "Deploying nvim config to ~/.config/nvim ..."
     mkdir -p ~/.config/nvim
+    # Remove legacy init.vim shim that conflicts with init.lua
+    rm -f ~/.config/nvim/init.vim
     rsync --exclude ".DS_Store" \
         -avh --no-perms nvim/ ~/.config/nvim/
 
