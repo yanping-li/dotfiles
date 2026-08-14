@@ -12,13 +12,6 @@ fi
 
 git pull origin master;
 
-function copyAndApplySysctl() {
-    echo "Copy and apply sysctl config ..."
-    sudo cp sysctl/sysctl.conf.osx /etc/sysctl.conf
-    cat /etc/sysctl.conf | xargs sudo sysctl
-    echo "Done."
-}
-
 function setupTmuxPlugins() {
     echo "Setting up tmux plugins ..."
     local tpm_dir="$HOME/.tmux/plugins/tpm"
@@ -86,9 +79,6 @@ function doIt() {
     generateCronjobs;
     source ~/.bash_profile;
 
-    if [ "$MACHINE_TYPE" != "devserver" ]; then
-        copyAndApplySysctl;
-    fi
     setupTmuxPlugins;  # tmux plugins work on all platforms
 }
 
@@ -106,7 +96,6 @@ else
 fi;
 
 unset doIt;
-unset copyAndApplySysctl;
 unset setupTmuxPlugins;
 unset generateGitconfig;
 unset generateCronjobs;
