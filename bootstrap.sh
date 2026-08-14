@@ -101,7 +101,6 @@ function doIt() {
         --exclude "plan.md" \
         --exclude "words.md" \
         --exclude "personal-access-token" \
-        --exclude "todo.txt" \
         --exclude "musttodo.txt" \
         --exclude "sysctl/" \
         --exclude "brew.sh" \

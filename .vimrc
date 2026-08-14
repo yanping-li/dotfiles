@@ -8,7 +8,8 @@ filetype off                  " required
 " Change mapleader
 let mapleader=","
 
-" set the runtime path to include Vundle and initialize
+" Plugins via Vundle (only if installed)
+if !empty(glob('~/.vim/bundle/Vundle.vim'))
 set rtp+=~/.vim/bundle/Vundle.vim
 call vundle#begin()
 
@@ -68,6 +69,7 @@ let g:go_version_warning = 0
 " All of your Plugins must be added before the following line
 call vundle#end()            " required
 filetype plugin indent on    " required
+endif
 
 
 " SET COLOR

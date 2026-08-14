@@ -38,7 +38,7 @@ opt.fileencoding = "utf-8"
 opt.backup = false
 opt.swapfile = false
 opt.undofile = true
-opt.undodir = vim.fn.expand("~/.vim/undo")
+opt.undodir = vim.fn.stdpath("data") .. "/undo"
 
 -- Clipboard: sync with OS when not in tmux
 if vim.env.TMUX == nil or vim.env.TMUX == "" then

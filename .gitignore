@@ -7,6 +7,10 @@
 # Sensitive local files
 personal-access-token
 
+# Runtime files
+words.md
+.nvimlog
+
 # AI tooling
 /.agents
 /.docs
