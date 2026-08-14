@@ -1,3 +1,23 @@
+# cscope index files
+/src/*cscope*
+
+# Machine-specific local files
+.machine_type
+
+# Sensitive local files
+personal-access-token
+
+# AI tooling
+/.agents
+/.docs
+/.plans
+/.prompts
+/.roo/rules
+/.roo/rules-architect
+/.roo/rules-code
+/.scripts
+/AGENTS2.md
+
 # Compiled Python files
 *.pyc
 

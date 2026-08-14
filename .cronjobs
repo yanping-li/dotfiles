@@ -37,45 +37,14 @@
 # * * * * * CMD
 # * * * * * sleep 30; CMD
 #
-# Root update packages every month.
-# 0 12 1 * * root apt-get -y update
-#
 # Keyword    Equivalent
 # @yearly    0 0 1 1 *
 # @daily     0 0 * * *
 # @hourly    0 * * * *
 # @reboot    Run at startup.
 
-
 # Set up environment
-#HOME=user’s-home-directory
-#LOGNAME=user’s-login-id
 SHELL=/bin/bash
-PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin://homes/lexli/bin:/volume/buildtools/bin:/volume/labtools/bin:/volume/ssd-tools/bin:/volume/nxsw-CVS/bin:/volume/baas_devops/bin
-#MAILTO=lexli@juniper.net
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
-# Juniper Networks
-
-# Send out email remainder for sending out weekly report 10am every Monday.
-00 10 * * mon mail -s "-- Send out weekly report. --" lexli@juniper.net
-00 11 * * mon mail -s "-- Have you sent out weekly report? --" lexli@juniper.net
-00 16 * * mon mail -s "-- Have you sent out weekly report? --" lexli@juniper.net
-
-# Run script to check PRs not updated x days and send out reminder.
-00 07 * * * /homes/lexli/dev/script-bash/prs-not-updated-for-x-days/pr-no-update 3
-
-# Update CVS repository 10am every Sunday.
-00 10 * * sun /homes/lexli/git/cvs/script-to-update-whole-cvs-repository
-00 10 * * sun mail -s "CVS repository updated." lexli@juniper.net
-
-# Send out email for new PR or PR is marked 'reproducible'.
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_PR
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_NO_ACE
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_REPRODUCIBLE
-*/10 * * * * /homes/lexli/dev/script-bash/send-mail-for-gnats/send-mail-for-gnats-update.sh NEW_NOT_ASSIGNED
-
-# Get output of 'baas lspod' every minute.
-*/1 * * * * baas lspod -l > ~/dev/lspod.txt
-
-# Send email on system reboot
-@reboot mail -s "System has been rebooted, host: $(hostname), current time: $(date)" lexli@juniper.net
+# Add your cron jobs below:

@@ -8,9 +8,17 @@ export PATH="$HOME/bin:$PATH";
 # Load the shell dotfiles, and then some:
 # * ~/.path can be used to extend `$PATH`.
 # * ~/.extra can be used for other settings you don't want to commit.
-for file in ~/.{path,bash_prompt,exports,aliases,functions,extra,pan_rc}; do
+# Load machine type first so other files can use $MACHINE_TYPE
+[ -f ~/.machine_type ] && source ~/.machine_type;
+
+for file in ~/.{path,bash_prompt,exports,aliases,functions,extra}; do
     [ -r "$file" ] && [ -f "$file" ] && source "$file";
 done;
+
+# Source work-specific config only on work machines
+if [[ "$MACHINE_TYPE" == "work" || "$MACHINE_TYPE" == "devserver" ]]; then
+    [ -f ~/.pan_rc ] && source ~/.pan_rc;
+fi
 unset file;
 
 # Don't enable case-insensitive globbing.
@@ -39,7 +47,7 @@ elif [ -f /etc/bash_completion ]; then
 fi;
 
 # Enable tab completion for `g` by marking it as an alias for `git`
-if type _git &> /dev/null && [ -f /usr/local/etc/bash_completion.d/git-completion.bash ]; then
+if type _git &> /dev/null && [ -f "$(brew --prefix 2>/dev/null)/etc/bash_completion.d/git-completion.bash" ]; then
     complete -o default -o nospace -F _git g;
 fi;
 
@@ -51,10 +59,10 @@ fi;
 complete -W "NSGlobalDomain" defaults;
 
 # Add `killall` tab completion for common apps
-complete -o "nospace" -W "Contacts Calendar Dock Finder Mail Safari iTunes SystemUIServer Terminal Twitter" killall;
+complete -o "nospace" -W "Contacts Calendar Dock Finder SystemUIServer Terminal" killall;
 
 # Suppress 'The default interactive shell is now zsh ...'
 export BASH_SILENCE_DEPRECATION_WARNING=1
 
-# brew env
-eval "$(/opt/homebrew/bin/brew shellenv)"
+# brew env (macOS only)
+[ -f /opt/homebrew/bin/brew ] && eval "$(/opt/homebrew/bin/brew shellenv)"

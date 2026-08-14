@@ -2,72 +2,111 @@
 
 cd "$(dirname "${BASH_SOURCE}")";
 
+MACHINE_TYPE="$1"
+
+if [[ "$MACHINE_TYPE" != "personal" && "$MACHINE_TYPE" != "work" && "$MACHINE_TYPE" != "devserver" ]]; then
+    echo "Usage: ./bootstrap.sh <machine-type> [--force]"
+    echo "  machine-type: personal | work | devserver"
+    exit 1
+fi
+
 git pull origin master;
 
 function copyAndApplySysctl() {
-	echo "Copy and apply sysctl config ..."
-    unameOut="$(uname -s)"
-    case "${unameOut}" in
-
-#       Linux*)
-#       sudo cp sysctl/sysctl.conf.linux /etc/sysctl.conf
-#       sudo sysctl -p
-#       ;;
-
-        Darwin*)
-        sudo cp sysctl/sysctl.conf.osx /etc/sysctl.conf
-        cat /etc/sysctl.conf | xargs sudo sysctl
-        ;;
-    esac
-	echo "Done."
+    echo "Copy and apply sysctl config ..."
+    sudo cp sysctl/sysctl.conf.osx /etc/sysctl.conf
+    cat /etc/sysctl.conf | xargs sudo sysctl
+    echo "Done."
 }
 
 function setupTmuxPlugins() {
-	echo "Setting up tmux plugins ..."
-	local tpm_dir="$HOME/.tmux/plugins/tpm"
-	if [ ! -d "$tpm_dir" ]; then
-		echo "Installing TPM (Tmux Plugin Manager) ..."
-		git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
-	else
-		echo "TPM already installed, updating ..."
-		git -C "$tpm_dir" pull
-	fi
+    echo "Setting up tmux plugins ..."
+    local tpm_dir="$HOME/.tmux/plugins/tpm"
+    if [ ! -d "$tpm_dir" ]; then
+        echo "Installing TPM (Tmux Plugin Manager) ..."
+        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+    else
+        echo "TPM already installed, updating ..."
+        git -C "$tpm_dir" pull
+    fi
 
-	# Install/update plugins via TPM (works without a running tmux session)
-	echo "Installing tmux plugins ..."
-	"$tpm_dir/bin/install_plugins"
-	echo "Done."
+    echo "Installing tmux plugins ..."
+    "$tpm_dir/bin/install_plugins"
+    echo "Done."
+}
+
+function generateGitconfig() {
+    echo "Generating ~/.gitconfig ..."
+    local identity_file=""
+    case "$MACHINE_TYPE" in
+        personal)  identity_file=".gitconfig-personal" ;;
+        work)      identity_file=".gitconfig-work" ;;
+        devserver) identity_file=".gitconfig-work" ;;
+    esac
+    cat .gitconfig "$identity_file" > ~/.gitconfig
+    echo "Done."
+}
+
+function generateCronjobs() {
+    echo "Generating ~/.cronjobs ..."
+    cat .cronjobs ".cronjobs.$MACHINE_TYPE" > ~/.cronjobs
+    crontab ~/.cronjobs
+    echo "Done."
 }
 
 function doIt() {
-    git clone https://github.com/gmarik/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-	rsync --exclude ".git/" \
-		--exclude ".DS_Store" \
-		--exclude ".osx" \
-		--exclude "bootstrap.sh" \
-		--exclude "README.md" \
-		--exclude "CLAUDE.md" \
-		--exclude "LICENSE-MIT.txt" \
-		--exclude "todo.txt" \
-		--exclude "musttodo.txt" \
-        --exclude "sysctl/" \
-		-avh --no-perms . ~;
-	source ~/.bash_profile;
+    # Install Vim plugin manager (skip on devserver)
+    if [ "$MACHINE_TYPE" != "devserver" ] && [ ! -d ~/.vim/bundle/Vundle.vim ]; then
+        git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
+    fi
 
-    copyAndApplySysctl;
-    setupTmuxPlugins;
+    rsync --exclude ".git/" \
+        --exclude ".DS_Store" \
+        --exclude "bootstrap.sh" \
+        --exclude "README.md" \
+        --exclude "CLAUDE.md" \
+        --exclude "LICENSE-MIT.txt" \
+        --exclude "plan.md" \
+        --exclude "words.md" \
+        --exclude "personal-access-token" \
+        --exclude "todo.txt" \
+        --exclude "musttodo.txt" \
+        --exclude "sysctl/" \
+        --exclude "brew.sh" \
+        --exclude ".claude/" \
+        --exclude ".gitconfig" \
+        --exclude ".gitconfig-personal" \
+        --exclude ".gitconfig-work" \
+        --exclude ".cronjobs.*" \
+        -avh --no-perms . ~;
+
+    # Write machine type before sourcing shell config
+    echo "export MACHINE_TYPE=$MACHINE_TYPE" > ~/.machine_type;
+    generateGitconfig;
+    generateCronjobs;
+    source ~/.bash_profile;
+
+    if [ "$MACHINE_TYPE" != "devserver" ]; then
+        copyAndApplySysctl;
+    fi
+    setupTmuxPlugins;  # tmux plugins work on all platforms
 }
 
+# Shift past machine-type arg so --force check works
+shift
+
 if [ "$1" == "--force" -o "$1" == "-f" ]; then
-	doIt;
+    doIt;
 else
-	read -p "This may overwrite existing files in your home directory. Are you sure? (y/n) " -n 1;
-	echo "";
-	if [[ $REPLY =~ ^[Yy]$ ]]; then
-		doIt;
-	fi;
+    read -p "This may overwrite existing files in your home directory. Are you sure? (y/n) " -n 1;
+    echo "";
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        doIt;
+    fi;
 fi;
 
 unset doIt;
 unset copyAndApplySysctl;
 unset setupTmuxPlugins;
+unset generateGitconfig;
+unset generateCronjobs;
