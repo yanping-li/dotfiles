@@ -47,6 +47,22 @@ function generateCronjobs() {
     echo "Done."
 }
 
+function installNvimBinary() {
+    if command -v nvim &>/dev/null && nvim --version | grep -q "^NVIM v0\.\([7-9]\|[1-9][0-9]\)"; then
+        echo "nvim $(nvim --version | head -1) already installed, skipping."
+        return
+    fi
+    echo "Installing nvim to ~/.local/bin ..."
+    mkdir -p ~/.local/bin
+    local tmp=$(mktemp -d)
+    curl -L --silent --show-error \
+        "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz" \
+        -o "$tmp/nvim.tar.gz"
+    tar -xzf "$tmp/nvim.tar.gz" -C ~/.local --strip-components=1
+    rm -rf "$tmp"
+    echo "Installed $(nvim --version | head -1)"
+}
+
 function deployNvim() {
     echo "Deploying nvim config to ~/.config/nvim ..."
     mkdir -p ~/.config/nvim
@@ -89,6 +105,9 @@ function doIt() {
         --exclude ".cronjobs.*" \
         -avh --no-perms . ~;
 
+    if [ "$MACHINE_TYPE" = "devserver" ]; then
+        installNvimBinary;
+    fi
     deployNvim;
 
     # Write machine type before sourcing shell config
@@ -115,6 +134,7 @@ fi;
 
 unset doIt;
 unset deployNvim;
+unset installNvimBinary;
 unset setupTmuxPlugins;
 unset generateGitconfig;
 unset generateCronjobs;

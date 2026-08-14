@@ -21,3 +21,6 @@ export MANPAGER='less -X';
 
 # GOPATH
 export GOPATH="${HOME}/data/go/"
+
+# On devserver, user-installed binaries live in ~/.local/bin (no root access)
+[ "$MACHINE_TYPE" = "devserver" ] && export PATH="$HOME/.local/bin:$PATH"
