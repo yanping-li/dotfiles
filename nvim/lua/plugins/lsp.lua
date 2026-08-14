@@ -54,7 +54,11 @@ function M.setup()
         automatic_installation = false,
     })
 
-    -- nvim 0.11 native LSP config
+    -- nvim 0.11 native LSP config (must call vim.lsp.config before vim.lsp.enable)
+    vim.lsp.config("gopls", {})
+    vim.lsp.config("pyright", {})
+    vim.lsp.config("bashls", {})
+    vim.lsp.config("clangd", {})
     vim.lsp.config("lua_ls", {
         settings = {
             Lua = {
@@ -65,7 +69,7 @@ function M.setup()
         },
     })
 
-    vim.lsp.enable({ "gopls", "pyright", "lua_ls", "bashls" })
+    vim.lsp.enable({ "gopls", "pyright", "lua_ls", "bashls", "clangd" })
 
     vim.api.nvim_create_autocmd("LspAttach", {
         callback = on_attach,
