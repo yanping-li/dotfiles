@@ -71,21 +71,6 @@ function installNvimBinary() {
     echo "Installed $(nvim --version | head -1)"
 }
 
-function installClangd() {
-    if command -v clangd &>/dev/null; then
-        echo "clangd $(clangd --version | head -1) already installed, skipping."
-        return
-    fi
-    echo "Installing clangd to ~/.local/bin ..."
-    local tmp=$(mktemp -d)
-    curl -L --silent --show-error \
-        "https://github.com/clangd/clangd/releases/latest/download/clangd-linux.zip" \
-        -o "$tmp/clangd.zip"
-    unzip -q "$tmp/clangd.zip" -d "$tmp/clangd"
-    mv "$tmp"/clangd/clangd_*/bin/clangd ~/.local/bin/
-    rm -rf "$tmp"
-    echo "Installed $(clangd --version | head -1)"
-}
 
 function deployNvim() {
     echo "Deploying nvim config to ~/.config/nvim ..."
@@ -130,7 +115,6 @@ function doIt() {
 
     if [ "$MACHINE_TYPE" = "devserver" ]; then
         installNvimBinary;
-        installClangd;
     fi
     deployNvim;
 
@@ -159,7 +143,6 @@ fi;
 unset doIt;
 unset deployNvim;
 unset installNvimBinary;
-unset installClangd;
 unset setupTmuxPlugins;
 unset generateGitconfig;
 unset generateCronjobs;
