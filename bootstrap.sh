@@ -52,7 +52,14 @@ function deployNvim() {
     mkdir -p ~/.config/nvim
     rsync --exclude ".DS_Store" \
         -avh --no-perms nvim/ ~/.config/nvim/
-    echo "Done. lazy.nvim will auto-install on first nvim launch."
+
+    local lazypath="$HOME/.local/share/nvim/lazy/lazy.nvim"
+    if [ ! -d "$lazypath" ]; then
+        echo "Bootstrapping lazy.nvim ..."
+        git clone --filter=blob:none --branch=stable \
+            https://github.com/folke/lazy.nvim.git "$lazypath"
+    fi
+    echo "Done."
 }
 
 function doIt() {
