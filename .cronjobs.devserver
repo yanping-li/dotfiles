@@ -1,2 +1,2 @@
 # Dev server (Ubuntu) cron jobs
-# Add devserver-specific cron jobs below:
+0 0 * * * cd ~/pan/main && git fetch
