@@ -58,7 +58,7 @@ opt.secure = true
 -- File type associations
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
     pattern = "*.json",
-    command = "setfiletype json syntax=javascript",
+    command = "setlocal filetype=json",
 })
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
     pattern = "*.md",
