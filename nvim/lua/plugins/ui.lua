@@ -11,7 +11,7 @@ function M.nvim_tree()
     vim.api.nvim_set_hl(0, "NvimTreeNormal", { bg = "#000000" })
     vim.api.nvim_set_hl(0, "NvimTreeEndOfBuffer", { bg = "#000000" })
     require("nvim-tree").setup({
-        view = { width = 30 },
+        view = { width = { min = 30, max = 60, padding = 2 } },
         renderer = {
             group_empty = true,
             icons = {
