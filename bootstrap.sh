@@ -47,12 +47,15 @@ function generateCronjobs() {
     echo "Done."
 }
 
-function doIt() {
-    # Install Vim plugin manager (skip on devserver)
-    if [ "$MACHINE_TYPE" != "devserver" ] && [ ! -d ~/.vim/bundle/Vundle.vim ]; then
-        git clone https://github.com/VundleVim/Vundle.vim.git ~/.vim/bundle/Vundle.vim
-    fi
+function deployNvim() {
+    echo "Deploying nvim config to ~/.config/nvim ..."
+    mkdir -p ~/.config/nvim
+    rsync --exclude ".DS_Store" \
+        -avh --no-perms nvim/ ~/.config/nvim/
+    echo "Done. lazy.nvim will auto-install on first nvim launch."
+}
 
+function doIt() {
     rsync --exclude ".git/" \
         --exclude ".DS_Store" \
         --exclude "bootstrap.sh" \
@@ -67,11 +70,14 @@ function doIt() {
         --exclude "sysctl/" \
         --exclude "brew.sh" \
         --exclude ".claude/" \
+        --exclude "nvim/" \
         --exclude ".gitconfig" \
         --exclude ".gitconfig-personal" \
         --exclude ".gitconfig-work" \
         --exclude ".cronjobs.*" \
         -avh --no-perms . ~;
+
+    deployNvim;
 
     # Write machine type before sourcing shell config
     echo "export MACHINE_TYPE=$MACHINE_TYPE" > ~/.machine_type;
@@ -96,6 +102,7 @@ else
 fi;
 
 unset doIt;
+unset deployNvim;
 unset setupTmuxPlugins;
 unset generateGitconfig;
 unset generateCronjobs;

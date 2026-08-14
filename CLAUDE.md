@@ -29,8 +29,8 @@ Personal dotfiles for macOS (personal + work) and Ubuntu (dev server), using Bas
 
 `bootstrap.sh` also:
 - Installs Homebrew packages via `brew.sh` (not run automatically — invoke separately)
+- Deploys `nvim/` to `~/.config/nvim/` (lazy.nvim auto-installs plugins on first launch)
 - Clones/updates TPM (Tmux Plugin Manager) and installs tmux plugins
-- Copies and applies the appropriate `sysctl/sysctl.conf.*` for the OS
 
 ## File loading order
 
@@ -56,7 +56,8 @@ Personal dotfiles for macOS (personal + work) and Ubuntu (dev server), using Bas
 | `.tmux.conf` | tmux config with TPM plugins (tmux-resurrect); vi mode keys |
 | `.ssh/config` | SSH host groups and global options (ForwardAgent, UseKeychain macOS-only) |
 | `.ssh/rc` | SSH post-login: symlinks `$SSH_AUTH_SOCK` for tmux agent forwarding |
-| `.vimrc` / `.vim/` | Vim config with Vundle plugin manager, Solarized theme |
+| `.vimrc` | Vim config (fallback for servers without nvim) |
+| `nvim/` | Neovim config (Lua, lazy.nvim, LSP, Telescope, Treesitter) — deployed to `~/.config/nvim/` |
 | `.gitconfig` | Git settings (no identity — appended by `bootstrap.sh`) |
 | `.gitconfig-personal` | Git identity for personal machine |
 | `.gitconfig-work` | Git identity for work/devserver |
@@ -79,4 +80,6 @@ Personal dotfiles for macOS (personal + work) and Ubuntu (dev server), using Bas
 - Git identity (`[user]`) is not in `.gitconfig` — `bootstrap.sh` appends `.gitconfig-personal` or `.gitconfig-work` to produce `~/.gitconfig`.
 - `.pan_rc` is sourced only when `MACHINE_TYPE` is `work` or `devserver`.
 - `.extra` and `.path` are machine-local overrides not committed to this repo.
-- Vim plugins are managed by Vundle (cloned during `bootstrap.sh`); tmux plugins by TPM.
+- Neovim config lives in `nvim/` (deployed to `~/.config/nvim/`); lazy.nvim bootstraps itself on first launch.
+- `.vimrc` is kept as a fallback for servers without nvim.
+- tmux plugins are managed by TPM.
