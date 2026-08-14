@@ -15,6 +15,10 @@ map("n", "<Leader>fh", "<cmd>Telescope help_tags<CR>")
 -- Clear search highlight
 map("n", "<Leader>h", "<cmd>nohlsearch<CR>")
 
+-- Terminal: open in horizontal split, exit terminal mode with Esc
+map("n", "<Leader>t", "<cmd>split | term<CR>")
+map("t", "<Esc>", "<C-\\><C-n>")
+
 -- Open current file in TextEdit (macOS)
 if vim.fn.has("mac") == 1 then
     map("n", "<F3>", "<cmd>!open -a TextEdit %<CR>")

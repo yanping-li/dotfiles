@@ -11,6 +11,7 @@ function M.nvim_tree()
     vim.api.nvim_set_hl(0, "NvimTreeNormal", { bg = "#000000" })
     vim.api.nvim_set_hl(0, "NvimTreeEndOfBuffer", { bg = "#000000" })
     require("nvim-tree").setup({
+        actions = { open_file = { quit_on_open = false } },
         view = { width = { min = 30, max = 60, padding = 2 } },
         renderer = {
             group_empty = true,
@@ -37,17 +38,6 @@ function M.nvim_tree()
             },
         },
         filters = { dotfiles = false },
-    })
-    -- Close nvim-tree if it's the last window
-    vim.api.nvim_create_autocmd("BufEnter", {
-        nested = true,
-        callback = function()
-            if #vim.api.nvim_list_wins() == 1
-                and require("nvim-tree.utils").is_nvim_tree_buf()
-            then
-                vim.cmd("quit")
-            end
-        end,
     })
 end
 
