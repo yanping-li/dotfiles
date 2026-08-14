@@ -47,3 +47,9 @@ if [ "$(uname)" = "Darwin" ]; then
     # Merge PDF files
     alias mergepdf='/System/Library/Automator/Combine\ PDF\ Pages.action/Contents/Resources/join.py'
 fi
+
+# Use nvim for vi/vim if available
+if command -v nvim &>/dev/null; then
+    alias vi='nvim'
+    alias vim='nvim'
+fi
