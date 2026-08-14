@@ -53,7 +53,7 @@ function deployNvim() {
     # Remove legacy init.vim shim that conflicts with init.lua
     rm -f ~/.config/nvim/init.vim
     rsync --exclude ".DS_Store" \
-        -avh --no-perms nvim/ ~/.config/nvim/
+        --delete -avh --no-perms nvim/ ~/.config/nvim/
 
     local lazypath="$HOME/.local/share/nvim/lazy/lazy.nvim"
     if [ ! -d "$lazypath" ]; then
