@@ -48,9 +48,17 @@ function generateCronjobs() {
 }
 
 function installNvimBinary() {
-    if command -v nvim &>/dev/null && nvim --version | grep -q "^NVIM v0\.\([7-9]\|[1-9][0-9]\)"; then
-        echo "nvim $(nvim --version | head -1) already installed, skipping."
-        return
+    if command -v nvim &>/dev/null; then
+        local ver
+        ver=$(nvim --version | head -1 | sed 's/NVIM v//')
+        local major minor
+        major=$(echo "$ver" | cut -d. -f1)
+        minor=$(echo "$ver" | cut -d. -f2)
+        if [ "$major" -gt 0 ] || [ "$minor" -ge 7 ]; then
+            echo "nvim $ver already installed, skipping."
+            return
+        fi
+        echo "nvim $ver is too old, reinstalling ..."
     fi
     echo "Installing nvim to ~/.local/bin ..."
     mkdir -p ~/.local/bin
