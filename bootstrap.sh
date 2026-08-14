@@ -61,6 +61,9 @@ function deployNvim() {
         git clone --filter=blob:none --branch=stable \
             https://github.com/folke/lazy.nvim.git "$lazypath"
     fi
+
+    echo "Installing nvim plugins ..."
+    nvim --headless "+Lazy! sync" +qa 2>/dev/null
     echo "Done."
 }
 
