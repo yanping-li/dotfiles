@@ -1,7 +1,7 @@
 [alias]
 
 	# One-line log with hash, date, author, message
-	oneline = log --format="%h %ad %an %s" --date=short
+	oneline = log --graph --pretty=format:'%C(yellow)%h%Creset %C(cyan)%ad%Creset | %s %C(green)%d%Creset %C(bold blue)[%an]%Creset' --date=short
 
 	# Find branches containing commit
 	findbranch = "!f() { git branch -a --contains $1; }; f"
@@ -10,10 +10,10 @@
 	findtag = "!f() { git describe --always --contains $1; }; f"
 
 	# Find commits by source code
-	findcode = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short -S$1; }; f"
+	findcode = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short -S\"$1\"; }; f"
 
 	# Find commits by commit message
-	findmessage = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --grep=$1; }; f"
+	findmessage = "!f() { git log --pretty=format:'%C(yellow)%h  %Cblue%ad  %Creset%s%Cgreen  [%cn] %Cred%d' --decorate --date=short --grep=\"$1\"; }; f"
 
 	# List contributors with number of commits
 	contributors = shortlog --summary --numbered
