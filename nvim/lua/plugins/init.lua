@@ -11,14 +11,15 @@ end
 vim.opt.rtp:prepend(lazypath)
 
 local plugins = {
+
     -- Colorscheme
     {
-        "folke/tokyonight.nvim",
+        "Mofiqul/vscode.nvim",
         lazy = false,
         priority = 1000,
         config = function()
-            require("tokyonight").setup({ style = "night" })
-            vim.cmd("colorscheme tokyonight")
+            require("vscode").setup({ style = "dark", color_overrides = { vscBack = "#000000" } })
+            vim.cmd("colorscheme vscode")
         end,
     },
 

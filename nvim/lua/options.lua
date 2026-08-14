@@ -54,6 +54,7 @@ opt.list = false
 opt.listchars = { tab = ">-", trail = ".", extends = ">", precedes = "<" }
 opt.secure = true
 
+
 -- File type associations
 vim.api.nvim_create_autocmd({ "BufNewFile", "BufRead" }, {
     pattern = "*.json",

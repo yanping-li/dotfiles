@@ -1,6 +1,15 @@
 local M = {}
 
 function M.nvim_tree()
+    vim.api.nvim_create_autocmd("ColorScheme", {
+        callback = function()
+            vim.api.nvim_set_hl(0, "NvimTreeNormal", { bg = "#000000" })
+            vim.api.nvim_set_hl(0, "NvimTreeEndOfBuffer", { bg = "#000000" })
+            vim.api.nvim_set_hl(0, "NvimTreeWinSeparator", { bg = "#000000", fg = "#000000" })
+        end,
+    })
+    vim.api.nvim_set_hl(0, "NvimTreeNormal", { bg = "#000000" })
+    vim.api.nvim_set_hl(0, "NvimTreeEndOfBuffer", { bg = "#000000" })
     require("nvim-tree").setup({
         view = { width = 30 },
         renderer = {
@@ -45,7 +54,7 @@ end
 function M.lualine()
     require("lualine").setup({
         options = {
-            theme = "tokyonight",
+            theme = "vscode",
             icons_enabled = false,
             section_separators = "",
             component_separators = "|",
