@@ -70,8 +70,13 @@ function M.setup()
         filetypes = { "sh", "bash" },
         root_markers = { ".git" },
     })
+    -- Use docker-clangd wrapper on devserver so clangd runs inside the
+    -- build container where compiler plugins and headers match the build.
+    local clangd_cmd = vim.fn.executable("docker-clangd") == 1
+        and { "docker-clangd" }
+        or { "clangd" }
     vim.lsp.config("clangd", {
-        cmd = { "clangd" },
+        cmd = clangd_cmd,
         filetypes = { "c", "cpp", "objc", "objcpp" },
         root_markers = { "compile_commands.json", ".git" },
     })
