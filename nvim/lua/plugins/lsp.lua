@@ -55,11 +55,30 @@ function M.setup()
     })
 
     -- nvim 0.11 native LSP config (must call vim.lsp.config before vim.lsp.enable)
-    vim.lsp.config("gopls", {})
-    vim.lsp.config("pyright", {})
-    vim.lsp.config("bashls", {})
-    vim.lsp.config("clangd", {})
+    vim.lsp.config("gopls", {
+        cmd = { "gopls" },
+        filetypes = { "go", "gomod", "gowork", "gotmpl" },
+        root_markers = { "go.mod", "go.work", ".git" },
+    })
+    vim.lsp.config("pyright", {
+        cmd = { "pyright-langserver", "--stdio" },
+        filetypes = { "python" },
+        root_markers = { "pyproject.toml", "setup.py", ".git" },
+    })
+    vim.lsp.config("bashls", {
+        cmd = { "bash-language-server", "start" },
+        filetypes = { "sh", "bash" },
+        root_markers = { ".git" },
+    })
+    vim.lsp.config("clangd", {
+        cmd = { "clangd" },
+        filetypes = { "c", "cpp", "objc", "objcpp" },
+        root_markers = { "compile_commands.json", ".git" },
+    })
     vim.lsp.config("lua_ls", {
+        cmd = { "lua-language-server" },
+        filetypes = { "lua" },
+        root_markers = { ".luarc.json", ".git" },
         settings = {
             Lua = {
                 diagnostics = { globals = { "vim" } },
