@@ -24,6 +24,7 @@ end)
 map("n", "<Leader>fg", "<cmd>Telescope live_grep<CR>")
 map("n", "<Leader>fb", "<cmd>Telescope buffers<CR>")
 map("n", "<Leader>fh", "<cmd>Telescope help_tags<CR>")
+map("n", "<Leader>fs", "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>")
 
 -- Clear search highlight
 map("n", "<Leader>h", "<cmd>nohlsearch<CR>")
