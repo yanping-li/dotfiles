@@ -90,10 +90,10 @@ function M.setup()
 
     vim.lsp.enable({ "gopls", "pyright", "lua_ls", "bashls", "clangd" })
 
-    -- :LspRestart — native-API replacement for the nvim-lspconfig command.
+    -- :LspReset — native-API replacement for the nvim-lspconfig command.
     -- Stops all LSP clients attached to the current buffer, then re-triggers
     -- attach via :edit so a fresh server (e.g. docker-clangd) starts.
-    vim.api.nvim_create_user_command("LspRestart", function()
+    vim.api.nvim_create_user_command("LspReset", function()
         local bufnr = vim.api.nvim_get_current_buf()
         for _, client in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
             vim.lsp.stop_client(client.id)
@@ -101,7 +101,7 @@ function M.setup()
         vim.defer_fn(function()
             vim.cmd("edit")
         end, 500)
-    end, { desc = "Restart LSP client(s) for the current buffer" })
+    end, { desc = "Reset (restart) LSP client(s) for the current buffer" })
 
     vim.api.nvim_create_autocmd("LspAttach", {
         callback = on_attach,
