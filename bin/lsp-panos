@@ -408,7 +408,7 @@ def activate(repo: Path, name: str):
     active.parent.mkdir(parents=True, exist_ok=True)
     active.write_text(name + "\n")
     info(f"[use] .lsp/active -> {name}")
-    info("done. In nvim run :LspRestart (or reopen) to load the active target.")
+    info("done. In nvim run :LspReset (or reopen) to load the active target.")
 
 
 # ---- top-level commands ----------------------------------------------------
