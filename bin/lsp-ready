@@ -342,6 +342,18 @@ def stage_index(repo: Path, tgt: Target, args):
     if not tgt.ccjson.exists():
         stage_die(f"[index] {tgt.ccjson} missing; run the 'collect' stage first")
     tgt.dir.mkdir(parents=True, exist_ok=True)
+    # Clear this target's background cache before re-indexing. clangd's
+    # --background-index writes shards under $TDIR/cache/clangd/index/ (see
+    # docker-clangd). A rebuilt panos.idx does NOT invalidate those shards, so
+    # stale ones can shadow the fresh static index (design doc: the 3 layers —
+    # compile_commands.json, panos.idx, cache — must move together). Wiping the
+    # cache here guarantees a rebuild yields a clean index; clangd repopulates
+    # it lazily on next open.
+    if tgt.cache.exists():
+        import shutil
+        shutil.rmtree(tgt.cache, ignore_errors=True)
+        info(f"[index] cleared stale background cache {tgt.cache}")
+    tgt.cache.mkdir(parents=True, exist_ok=True)
     # clangd-indexer drives clang semantics even for gcc/cc compile commands, so
     # it must be told where the clang-16 builtin headers live (stddef.h, stdarg.h,
     # etc.). Without this, every TU whose command is gcc/cc fails with
