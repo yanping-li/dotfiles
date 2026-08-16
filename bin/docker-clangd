@@ -1,0 +1,66 @@
+#!/bin/bash
+# docker-clangd — run version-matched clangd-16 INSIDE the build container,
+# seeded with a per-TARGET prebuilt index (panos.idx).
+#
+# Per-platform LSP: the active target is named in <repo>/.lsp/active (written by
+# `lsp-ready`). This wrapper reads it and points clangd at that target's
+# compile_commands.json dir, panos.idx, and its own background cache.
+#
+# If no target is active, clangd still starts but falls back to flag-less
+# parsing (WRONG #ifdef view). A loud banner is printed so it is never silent.
+#
+# --user makes the container process run as the host user so .cache shards are
+# owned by you (not root).
+
+set -euo pipefail
+
+# --- locate the repo root (dir containing src/ + .git), walking up from PWD ---
+find_repo() {
+  local d="$PWD"
+  while [ "$d" != "/" ]; do
+    if [ -d "$d/src" ] && [ -e "$d/.git" ]; then
+      echo "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+
+REPO="${PANLSP_REPO:-$(find_repo || true)}"
+if [ -z "${REPO:-}" ]; then
+  # Fallback to the legacy hard-coded worktree so behavior never fully breaks.
+  REPO="/home/lexli/pan/wte"
+fi
+
+ACTIVE_FILE="$REPO/.lsp/active"
+TARGET=""
+[ -f "$ACTIVE_FILE" ] && TARGET="$(tr -d '[:space:]' < "$ACTIVE_FILE")"
+
+# --- derive clangd flags from the active target (or fall back) ----------------
+CLANGD_ARGS=(--background-index)
+
+if [ -n "$TARGET" ] && [ -d "$REPO/.lsp/targets/$TARGET" ]; then
+  TDIR="$REPO/.lsp/targets/$TARGET"
+  mkdir -p "$TDIR/cache"
+  echo "docker-clangd: clangd target: $TARGET" >&2
+  CLANGD_ARGS+=(--compile-commands-dir="$TDIR")
+  [ -f "$TDIR/panos.idx" ] && CLANGD_ARGS+=(--index-file="$TDIR/panos.idx")
+  # per-target background cache: point HOME at the target so .cache/clangd
+  # shards land under $TDIR/cache and cannot contaminate other targets.
+  CACHE_HOME="$TDIR/cache"
+else
+  echo "docker-clangd: clangd target: NONE (fallback flags — run 'lsp-ready --platforms <p>' then 'lsp-ready --use <target>')" >&2
+  CACHE_HOME="/home/lexli"
+fi
+
+exec docker run --rm -i \
+  --user "$(id -u):$(id -g)" \
+  -v /home/lexli:/home/lexli \
+  -w "$REPO/src" \
+  -e HOME="$CACHE_HOME" \
+  -e USER="lexli" \
+  -e PATH="/home/lexli/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+  docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056 \
+  /home/lexli/.local/bin/clangd-16 \
+    "${CLANGD_ARGS[@]}" \
+    "$@"
