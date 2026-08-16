@@ -6,9 +6,12 @@ with different macros, so each needs its own compile_commands.json and panos.idx
 This tool builds/collects/indexes per-target artifacts under <repo>/.lsp/ and you
 activate one via <repo>/.lsp/active (read by the docker-clangd wrapper).
 
-A "target" is "<platform>-<role>", e.g. 5500-cp, 5500-dp, 5500-mp, vm-mp.
-Targets are derived from --platform x --rpm (a platform + an RPM type yields
-one or more role targets), e.g.  --platform 5500 --rpm idpfs -> 5500-cp,5500-dp.
+A "target" is "<platform>-<role>" with an optional HW sub-variant suffix, e.g.
+5500-cp, vm-mp, or 7500-cp-800g / 7500-dp-dpc (7500 builds cp/dp in variants).
+Targets are derived from --platforms x --rpms (a platform + an RPM type yields
+one or more role targets), then expanded to the real build tokens present on
+disk, e.g. --platforms 5500 --rpms idpfs -> 5500-cp,5500-dp;
+         --platforms 7500 --rpms idpfs -> 7500-cp-800g,7500-cp-dpc,7500-dp-800g,7500-dp-dpc.
 
 Stages:  build -> collect -> index   (choose with --do; default: all three)
 Switch the active target with --use <target>.
@@ -61,8 +64,10 @@ def detect_image(repo: Path) -> str:
         return f"{reg}/{name}:{ver}"
     return KETTLE_IMAGE_FALLBACK
 
-# A target token is "<platform>-<role>", e.g. 5500-cp, 5500-dp, vm-mp.
-TARGET_RE = re.compile(r"^[a-z0-9]+-[a-z]+$")
+# A target token is "<platform>-<role>" with an optional hardware sub-variant
+# suffix, e.g. 5500-cp, vm-mp, 7500-cp-800g, 7500-dp-dpc. Some platforms (7500)
+# build a role in several HW variants; each is a distinct build token / macro set.
+TARGET_RE = re.compile(r"^[a-z0-9]+-[a-z]+(?:-[a-z0-9]+)*$")
 
 # build-rpms skill: which RPM produces which roles for a platform (from SKILL.md).
 # Used to translate (--platforms x --rpms) into the concrete role targets.
@@ -73,12 +78,45 @@ RPM_ROLES = {
 }
 ALL_ROLES = ["cp", "dp", "mp"]
 
+# Which platforms each RPM supports. Mirrors build_rpms.py PLATFORM_SUPPORT
+# (sourced from pkg/pandb_source/targets_3x.py) so we can reject invalid
+# platform/rpm combos up front instead of failing deep inside a build.
+PLATFORM_SUPPORT = {
+    "mpfs": {
+        "7500", "7000", "7000b", "5400", "5200", "3200", "1600", "1400",
+        "1500", "3400", "5400f", "5500", "3500", "5500l", "800", "400",
+        "500s", "500f", "220", "vm", "vmarm", "ctnr",
+    },
+    "dpfs": {
+        "7000", "7000b", "5400", "5200", "3200", "800", "220", "vm",
+        "vmarm", "ctnr",
+    },
+    "idpfs": {
+        "7500", "5400", "1600", "1400", "1500", "3400", "5400f", "5500",
+        "3500", "5500l", "400", "500s", "500f",
+    },
+}
+
+# dpfs on these platforms is a cross-compiled mips/mips64 build; the x86_64
+# clang-16 builtin headers we pass to the indexer will NOT match, so indexing
+# those targets is best-effort. Warn rather than pretend it is correct.
+DPFS_NON_X86_PLATFORMS = {"7000b", "5400", "7000", "5200", "3200", "800", "220"}
+
 
 # ---- small utilities -------------------------------------------------------
+
+class StageError(Exception):
+    """A per-target stage failure that should skip the target, not abort the run."""
+
 
 def die(msg, code=1):
     print(f"lsp-ready: ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
+
+
+def stage_die(msg):
+    """Fail one target's stage without killing the whole run (caught in main)."""
+    raise StageError(msg)
 
 
 def info(msg):
@@ -118,11 +156,16 @@ def find_repo(start: Path) -> Path:
 
 
 def parse_target(target: str):
-    """'5500-cp' -> ('5500', 'cp'). Validates the token shape."""
+    """'5500-cp' -> ('5500', 'cp'); '7500-cp-800g' -> ('7500', 'cp').
+
+    Platform is the first '-' segment; role is the second. Any further segments
+    are a hardware sub-variant (e.g. 800g, dpc) that does not change the role or
+    the RPM used to build it. Validates the token shape.
+    """
     if not TARGET_RE.match(target):
-        die(f"bad target '{target}' (expected <platform>-<role>, e.g. 5500-cp)")
-    plat, role = target.rsplit("-", 1)
-    return plat, role
+        die(f"bad target '{target}' (expected <platform>-<role>[-<variant>], e.g. 5500-cp, 7500-cp-800g)")
+    parts = target.split("-")
+    return parts[0], parts[1]
 
 
 # ---- target paths ----------------------------------------------------------
@@ -152,83 +195,122 @@ def list_fragments(repo: Path, tgt: Target) -> list:
     return found
 
 
+def discover_tokens(repo: Path, plat: str, role: str) -> list:
+    """Return the target tokens actually built on disk for a (platform, role).
+
+    Some roles are built in several HW sub-variants (e.g. 7500 cp -> cp-800g,
+    cp-dpc); each shows up as its own '.bld/panos[.base]-<plat>-<role>[-<var>]'
+    directory. We scan for '<plat>-<role>' AND '<plat>-<role>-*' so both the
+    plain token (5500-cp) and sub-variant tokens (7500-cp-800g) are returned.
+    Result tokens are the build-token with the 'panos.base-'/'panos-' prefix
+    stripped, e.g. '7500-cp-800g'. Deduplicated, sorted.
+    """
+    src = repo / "src"
+    prefixes = ("panos.base-", "panos-")
+    want = f"{plat}-{role}"
+    tokens = set()
+    for d in src.glob("**/.bld/*"):
+        if not d.is_dir():
+            continue
+        n = d.name
+        for pre in prefixes:
+            if n.startswith(pre):
+                tok = n[len(pre):]                 # e.g. 7500-cp-800g
+                if tok == want or tok.startswith(want + "-"):
+                    tokens.add(tok)
+                break
+    return sorted(tokens)
+
+
 def resolve_targets(repo: Path, args) -> list:
-    """Cartesian product of --platforms x roles(--rpms) -> target tokens.
+    """Expand --platforms x roles(--rpms) into the real target tokens on disk.
 
     - --rpms given: roles come from the RPM_ROLES map for those RPM types.
     - --rpms omitted: use whichever roles already have build fragments on disk
       for each platform (so `--platforms 5500` just indexes what you've built).
+
+    A single (platform, role) can map to MULTIPLE tokens when the role is built
+    in HW sub-variants (7500 cp -> 7500-cp-800g, 7500-cp-dpc). We discover the
+    actual '.bld' tokens instead of assuming the plain '<plat>-<role>' shape.
+    If nothing is built yet but the 'build' stage is requested, we fall back to
+    the plain token so the build can run (it will emit the real variants, which
+    the collect/index stages then pick up).
     """
     if not args.platforms:
         die("nothing to do: pass --platforms (with optional --rpms), --use, --list or --clean")
     platforms = [p for p in args.platforms.split(",") if p]
+    building = "build" in getattr(args, "_stages", []) if hasattr(args, "_stages") else False
 
     roles = None
     if args.rpms:
         roles = []
-        for rpm in args.rpms.split(","):
-            rpm = rpm.strip()
+        rpm_list = [r.strip() for r in args.rpms.split(",") if r.strip()]
+        for rpm in rpm_list:
             if rpm not in RPM_ROLES:
                 die(f"unknown rpm '{rpm}' (valid: {', '.join(RPM_ROLES)})")
             for r in RPM_ROLES[rpm]:
                 if r not in roles:
                     roles.append(r)
+        # Reject platform/rpm combos the build system does not support, up front.
+        for plat in platforms:
+            for rpm in rpm_list:
+                if plat not in PLATFORM_SUPPORT[rpm]:
+                    ok = ", ".join(sorted(PLATFORM_SUPPORT[rpm]))
+                    die(f"platform '{plat}' does not support rpm '{rpm}'.\n"
+                        f"  supported platforms for {rpm}: {ok}")
+                if rpm == "dpfs" and plat in DPFS_NON_X86_PLATFORMS:
+                    info(f"WARNING: dpfs on '{plat}' is a mips/mips64 cross build; "
+                         f"the indexer uses x86_64 clang builtins, so the {plat}-dp "
+                         f"index may be inaccurate.")
 
     targets = []
     for plat in platforms:
-        if roles is not None:
-            wanted = roles
-        else:
-            # Auto-detect roles that have fragments for this platform.
-            wanted = [r for r in ALL_ROLES
-                      if list_fragments(repo, Target(repo, f"{plat}-{r}"))]
-            if not wanted:
-                die(f"no build fragments found for platform '{plat}'; "
-                    f"specify --rpms to build (e.g. --rpms idpfs) and --do build")
+        wanted = roles if roles is not None else ALL_ROLES
+        found_any = False
         for r in wanted:
-            tok = f"{plat}-{r}"
-            if tok not in targets:
-                targets.append(tok)
+            toks = discover_tokens(repo, plat, r)
+            if toks:
+                found_any = True
+                for tok in toks:
+                    if tok not in targets:
+                        targets.append(tok)
+            elif roles is not None and building:
+                # Not built yet, but the user asked to build this role: keep the
+                # plain token as a placeholder (build runs per plat+rpm in phase 1;
+                # collect/index re-resolve to the emitted variants afterwards).
+                tok = f"{plat}-{r}"
+                if tok not in targets:
+                    targets.append(tok)
+        if roles is None and not found_any:
+            die(f"no build fragments found for platform '{plat}'; "
+                f"specify --rpms to build (e.g. --rpms idpfs) and --do build")
     return targets
 
 
 # ---- stages ----------------------------------------------------------------
 
-def stage_build(repo: Path, tgt: Target, args):
-    """Invoke build-rpms for this target's platform+role RPM."""
-    rpm = None
-    if args.rpms:
-        # pick the RPM (from --rpms) that yields this role
-        for r in args.rpms.split(","):
-            r = r.strip()
-            if tgt.role in RPM_ROLES.get(r, []):
-                rpm = r
-                break
-    if rpm is None:
-        for r, roles in RPM_ROLES.items():
-            if tgt.role in roles:
-                rpm = r
-                break
-    if rpm is None:
-        die(f"[build] cannot map role '{tgt.role}' to an RPM; pass --rpms")
+def run_build(repo: Path, plat: str, rpm: str):
+    """Invoke build-rpms once for a platform+RPM. One RPM emits every role (and
+    every HW sub-variant) it contains, so building is keyed by (plat, rpm), not
+    by target token. A build failure is fatal (nothing downstream can proceed)."""
     build_cmd = [
         "python3",
         str(repo / ".agents/skills/build-rpms/build_rpms.py"),
-        "--platform", tgt.plat, "--rpm", rpm,
+        "--platform", plat, "--rpm", rpm,
     ]
-    rc = run_streamed(build_cmd, prefix=f"build:{tgt.name}")
+    rc = run_streamed(build_cmd, prefix=f"build:{plat}-{rpm}")
     if rc != 0:
-        die(f"[build] build-rpms failed for {tgt.name} (rpm={rpm})")
-    info(f"[build] {tgt.name} (rpm={rpm}) done")
+        die(f"[build] build-rpms failed for platform={plat} rpm={rpm}")
+    info(f"[build] platform={plat} rpm={rpm} done")
 
 
 def stage_collect(repo: Path, tgt: Target, args):
     """Filter fragments to THIS target, de-dup by 'file', write compile_commands.json."""
     frag = list_fragments(repo, tgt)
     if not frag:
-        die(f"[collect] no .compile_db fragments for {tgt.name}; build it first "
-            f"(e.g. --platforms {tgt.plat} --rpms <rpm> --do build) "
-            f"or check the platform-role token")
+        stage_die(f"[collect] no .compile_db fragments for {tgt.name}; build it first "
+                  f"(e.g. --platforms {tgt.plat} --rpms <rpm> --do build) "
+                  f"or check the platform-role token")
     entries = []
     for f in frag:
         try:
@@ -258,7 +340,7 @@ def stage_collect(repo: Path, tgt: Target, args):
 def stage_index(repo: Path, tgt: Target, args):
     """Run clangd-indexer-16 in-container: compile_commands.json -> panos.idx."""
     if not tgt.ccjson.exists():
-        die(f"[index] {tgt.ccjson} missing; run the 'collect' stage first")
+        stage_die(f"[index] {tgt.ccjson} missing; run the 'collect' stage first")
     tgt.dir.mkdir(parents=True, exist_ok=True)
     # clangd-indexer drives clang semantics even for gcc/cc compile commands, so
     # it must be told where the clang-16 builtin headers live (stddef.h, stdarg.h,
@@ -283,7 +365,7 @@ def stage_index(repo: Path, tgt: Target, args):
     t0 = time.time()
     r = run(cmd)
     if r.returncode != 0 or not tgt.idx.exists() or tgt.idx.stat().st_size == 0:
-        die(f"[index] indexer failed for {tgt.name}")
+        stage_die(f"[index] indexer failed for {tgt.name}")
     info(f"[index] built {tgt.idx} ({tgt.idx.stat().st_size} bytes) in {time.time()-t0:.0f}s")
 
 
@@ -427,6 +509,25 @@ def main():
         die("--do includes 'build' but --rpms not given "
             "(e.g. --rpms idpfs). Use --do collect,index to skip building.")
 
+    args._stages = stages  # lets resolve_targets keep plain fallback tokens for building
+
+    # Phase 1: build (once per platform+RPM; one RPM emits all its role variants).
+    if "build" in stages:
+        build_plan = []
+        for plat in [p for p in args.platforms.split(",") if p]:
+            for rpm in [r.strip() for r in args.rpms.split(",") if r.strip()]:
+                if (plat, rpm) not in build_plan:
+                    build_plan.append((plat, rpm))
+        if args.dry_run:
+            info(f"repo: {repo}")
+            info(f"build plan (platform,rpm): {build_plan}")
+        for plat, rpm in build_plan:
+            if args.dry_run:
+                continue
+            run_build(repo, plat, rpm)
+
+    # Phase 2: re-resolve to the REAL tokens on disk (build may have just emitted
+    # HW sub-variants like 7500-cp-800g), then collect/index each independently.
     targets = resolve_targets(repo, args)
 
     if args.dry_run:
@@ -435,19 +536,30 @@ def main():
         info(f"stages: {stages}")
         return
 
-    stage_fns = {
-        "build": stage_build,
-        "collect": stage_collect,
-        "index": stage_index,
-    }
+    post = [st for st in stages if st in ("collect", "index")]
+    if not post:
+        return
 
+    stage_fns = {"collect": stage_collect, "index": stage_index}
+    failed = []
     for name in targets:
         tgt = Target(repo, name)
-        info(f"=== target {name} : stages {stages} ===")
-        for st in stages:
-            stage_fns[st](repo, tgt, args)
-        if "collect" in stages or "index" in stages:
+        info(f"=== target {name} : stages {post} ===")
+        try:
+            for st in post:
+                stage_fns[st](repo, tgt, args)
             write_meta(repo, tgt)
+        except StageError as e:
+            info(f"[skip] {name}: {e}")
+            failed.append((name, str(e)))
+
+    failed_names = {n for n, _ in failed}
+    ok = [t for t in targets if t not in failed_names]
+    info(f"summary: {len(ok)} ok, {len(failed)} failed (ok: {', '.join(ok) or '-'})")
+    if failed:
+        for n, e in failed:
+            info(f"  FAILED {n}: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
