@@ -3,7 +3,7 @@
 # seeded with a per-TARGET prebuilt index (panos.idx).
 #
 # Per-platform LSP: the active target is named in <repo>/.lsp/active (written by
-# `lsp-ready`). This wrapper reads it and points clangd at that target's
+# `lsp-panos`). This wrapper reads it and points clangd at that target's
 # compile_commands.json dir, panos.idx, and its own background cache.
 #
 # If no target is active, clangd still starts but falls back to flag-less
@@ -72,7 +72,7 @@ if [ -n "$TARGET" ] && [ -d "$REPO/.lsp/targets/$TARGET" ]; then
   # shards land under $TDIR/cache and cannot contaminate other targets.
   CACHE_HOME="$TDIR/cache"
 else
-  echo "docker-clangd: clangd target: NONE (fallback flags — run 'lsp-ready --platforms <p>' then 'lsp-ready --use <target>')" >&2
+  echo "docker-clangd: clangd target: NONE (fallback flags — run 'lsp-panos --platforms <p>' then 'lsp-panos --use <target>')" >&2
   CACHE_HOME="/home/lexli"
 fi
 

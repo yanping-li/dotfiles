@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""lsp-ready — make a PAN-OS worktree LSP-ready for a given platform/role target.
+"""lsp-panos — make a PAN-OS worktree LSP-ready for a given platform/role target.
 
 Per-platform clangd setup: different platforms/roles compile the same .c files
 with different macros, so each needs its own compile_commands.json and panos.idx.
@@ -110,7 +110,7 @@ class StageError(Exception):
 
 
 def die(msg, code=1):
-    print(f"lsp-ready: ERROR: {msg}", file=sys.stderr)
+    print(f"lsp-panos: ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
 
 
@@ -120,7 +120,7 @@ def stage_die(msg):
 
 
 def info(msg):
-    print(f"lsp-ready: {msg}")
+    print(f"lsp-panos: {msg}")
 
 
 def run(cmd, **kw):
@@ -420,7 +420,7 @@ def cmd_list(repo: Path):
     if af.exists():
         active = af.read_text().strip()
     if not targets_dir.exists():
-        print("no targets built yet (run: lsp-ready --platforms <plat> --rpms <rpm>)")
+        print("no targets built yet (run: lsp-panos --platforms <plat> --rpms <rpm>)")
         if not active:
             print("active: NONE (clangd will use fallback flags)")
         return
@@ -431,7 +431,7 @@ def cmd_list(repo: Path):
         has_idx = (d / "panos.idx").exists()
         print(f"  {d.name}{mark}  index={'yes' if has_idx else 'NO'}")
     if not active:
-        print("active: NONE (clangd will use fallback flags — run lsp-ready --use <target>)")
+        print("active: NONE (clangd will use fallback flags — run lsp-panos --use <target>)")
     elif not (targets_dir / active).exists():
         print(f"active: {active} (WARNING: target dir missing)")
 
@@ -462,7 +462,7 @@ def main():
         return argparse.RawTextHelpFormatter(prog, max_help_position=40, width=100)
 
     ap = argparse.ArgumentParser(
-        prog="lsp-ready",
+        prog="lsp-panos",
         description="Make a PAN-OS worktree LSP-ready for platform/role targets.",
         formatter_class=fmt)
     ap.add_argument("--platforms", metavar="<7500,5500,..>",
@@ -498,7 +498,7 @@ def main():
         tgt = Target(repo, args.use)  # validates shape
         if not tgt.dir.exists():
             die(f"--use {args.use}: target not built "
-                f"(run: lsp-ready --platforms {tgt.plat} --rpms <rpm>)")
+                f"(run: lsp-panos --platforms {tgt.plat} --rpms <rpm>)")
         return activate(repo, tgt.name)
 
     # Stage selection: default is all three (build, collect, index).
