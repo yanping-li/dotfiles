@@ -91,6 +91,23 @@ def run(cmd, **kw):
     return subprocess.run(cmd, **kw)
 
 
+def run_streamed(cmd, prefix):
+    """Run a command, streaming its output line-buffered with a fixed prefix.
+
+    The build sub-tool (build_rpms.py) prints its own timestamped lines; piping
+    them raw interleaves with our messages and wraps badly. Reading line-by-line
+    and re-emitting with a stable "  prefix| " keeps the log readable and grep-able.
+    Returns the process exit code.
+    """
+    info("+ " + " ".join(str(c) for c in cmd))
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    for line in p.stdout:
+        print(f"  {prefix}| {line.rstrip()}", flush=True)
+    p.wait()
+    return p.returncode
+
+
 def find_repo(start: Path) -> Path:
     """Walk up from start to the dir containing both src/ and .git."""
     p = start.resolve()
@@ -199,9 +216,10 @@ def stage_build(repo: Path, tgt: Target, args):
         str(repo / ".agents/skills/build-rpms/build_rpms.py"),
         "--platform", tgt.plat, "--rpm", rpm,
     ]
-    r = run(build_cmd)
-    if r.returncode != 0:
+    rc = run_streamed(build_cmd, prefix=f"build:{tgt.name}")
+    if rc != 0:
         die(f"[build] build-rpms failed for {tgt.name} (rpm={rpm})")
+    info(f"[build] {tgt.name} (rpm={rpm}) done")
 
 
 def stage_collect(repo: Path, tgt: Target, args):
@@ -357,8 +375,8 @@ def main():
                     help="comma for multiple")
     ap.add_argument("--rpms", metavar="<mpfs,dpfs,idpfs>",
                     help="comma for multiple")
-    ap.add_argument("--do", dest="do", metavar="<build,collect,index>",
-                    help="comma for multiple, by default all of them")
+    ap.add_argument("--do", dest="do", metavar="<build,collect,index,all>",
+                    help="comma for multiple; 'all' = build,collect,index (default)")
     ap.add_argument("--use", metavar="<target>",
                     help="use this target (e.g. 5500-dp, 7500-mp)")
     ap.add_argument("--list", action="store_true",
@@ -390,12 +408,16 @@ def main():
         return activate(repo, tgt.name)
 
     # Stage selection: default is all three (build, collect, index).
+    # 'all' is an alias for every stage.
     if args.do:
-        stages = [s.strip() for s in args.do.split(",") if s.strip()]
-        for s in stages:
-            if s not in STAGES:
-                die(f"unknown stage '{s}' (valid: {', '.join(STAGES)})")
-        stages = [s for s in STAGES if s in stages]  # canonical order
+        req = [s.strip() for s in args.do.split(",") if s.strip()]
+        if "all" in req:
+            stages = list(STAGES)
+        else:
+            for s in req:
+                if s not in STAGES:
+                    die(f"unknown stage '{s}' (valid: {', '.join(STAGES)}, all)")
+            stages = [s for s in STAGES if s in req]  # canonical order
     else:
         stages = list(STAGES)
 
