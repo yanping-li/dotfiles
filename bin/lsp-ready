@@ -1,0 +1,432 @@
+#!/usr/bin/env python3
+"""lsp-ready — make a PAN-OS worktree LSP-ready for a given platform/role target.
+
+Per-platform clangd setup: different platforms/roles compile the same .c files
+with different macros, so each needs its own compile_commands.json and panos.idx.
+This tool builds/collects/indexes per-target artifacts under <repo>/.lsp/ and you
+activate one via <repo>/.lsp/active (read by the docker-clangd wrapper).
+
+A "target" is "<platform>-<role>", e.g. 5500-cp, 5500-dp, 5500-mp, vm-mp.
+Targets are derived from --platform x --rpm (a platform + an RPM type yields
+one or more role targets), e.g.  --platform 5500 --rpm idpfs -> 5500-cp,5500-dp.
+
+Stages:  build -> collect -> index   (choose with --do; default: all three)
+Switch the active target with --use <target>.
+
+See design: .plans/nvim/2026-08-15_per-platform-lsp-design.md
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+# ---- constants -------------------------------------------------------------
+
+STAGES = ["build", "collect", "index"]
+
+# Fallback only; the real image is detected per-worktree from dock.mk (the kettle
+# image is NOT fixed across branches/worktrees). See detect_image().
+KETTLE_IMAGE_FALLBACK = "docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056"
+INDEXER = "/home/lexli/.local/bin/clangd-indexer-16"
+CLANGD = "/home/lexli/.local/bin/clangd-16"
+
+
+def detect_image(repo: Path) -> str:
+    """Resolve the kettle build image from this worktree's src/mk/config/dock.mk.
+
+    Precedence: $PANLSP_IMAGE env override > parsed dock.mk > hard-coded fallback.
+    Parses REGISTRY / DOCK_IMAGE_NAME / PAN_KETTLE_VERSION so the indexer runs in
+    the SAME toolchain the build uses (clang-16 + matching sysroot/headers).
+    """
+    env = os.environ.get("PANLSP_IMAGE")
+    if env:
+        return env
+    dockmk = repo / "src" / "mk" / "config" / "dock.mk"
+    if not dockmk.exists():
+        return KETTLE_IMAGE_FALLBACK
+    vals = {}
+    pat = re.compile(r"^\s*(REGISTRY|DOCK_IMAGE_NAME|PAN_KETTLE_VERSION)\s*[:?]?=\s*(.+?)\s*(?:#.*)?$")
+    for line in dockmk.read_text().splitlines():
+        m = pat.match(line)
+        if m and m.group(1) not in vals:   # first definition wins (matches make ?=)
+            vals[m.group(1)] = m.group(2).strip()
+    reg, name, ver = vals.get("REGISTRY"), vals.get("DOCK_IMAGE_NAME"), vals.get("PAN_KETTLE_VERSION")
+    if reg and name and ver:
+        return f"{reg}/{name}:{ver}"
+    return KETTLE_IMAGE_FALLBACK
+
+# A target token is "<platform>-<role>", e.g. 5500-cp, 5500-dp, vm-mp.
+TARGET_RE = re.compile(r"^[a-z0-9]+-[a-z]+$")
+
+# build-rpms skill: which RPM produces which roles for a platform (from SKILL.md).
+# Used to translate (--platforms x --rpms) into the concrete role targets.
+RPM_ROLES = {
+    "idpfs": ["cp", "dp"],   # e.g. idpfs 5500 -> panos.base-5500-cp + -dp
+    "mpfs": ["mp"],
+    "dpfs": ["dp"],
+}
+ALL_ROLES = ["cp", "dp", "mp"]
+
+
+# ---- small utilities -------------------------------------------------------
+
+def die(msg, code=1):
+    print(f"lsp-ready: ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def info(msg):
+    print(f"lsp-ready: {msg}")
+
+
+def run(cmd, **kw):
+    """Run a command, echoing it; raise on failure unless check=False."""
+    info("+ " + " ".join(str(c) for c in cmd))
+    return subprocess.run(cmd, **kw)
+
+
+def find_repo(start: Path) -> Path:
+    """Walk up from start to the dir containing both src/ and .git."""
+    p = start.resolve()
+    for cand in [p, *p.parents]:
+        if (cand / "src").is_dir() and (cand / ".git").exists():
+            return cand
+    die(f"could not locate repo root (dir with src/ + .git) from {start}")
+
+
+def parse_target(target: str):
+    """'5500-cp' -> ('5500', 'cp'). Validates the token shape."""
+    if not TARGET_RE.match(target):
+        die(f"bad target '{target}' (expected <platform>-<role>, e.g. 5500-cp)")
+    plat, role = target.rsplit("-", 1)
+    return plat, role
+
+
+# ---- target paths ----------------------------------------------------------
+
+class Target:
+    def __init__(self, repo: Path, name: str):
+        self.repo = repo
+        self.name = name
+        self.plat, self.role = parse_target(name)
+        self.dir = repo / ".lsp" / "targets" / name
+        self.ccjson = self.dir / "compile_commands.json"
+        self.idx = self.dir / "panos.idx"
+        self.cache = self.dir / "cache"
+        self.meta = self.dir / "meta.json"
+
+
+# ---- target resolution -----------------------------------------------------
+
+def list_fragments(repo: Path, tgt: Target) -> list:
+    """Find .compile_db fragments for this exact target token."""
+    src = repo / "src"
+    # Two token styles seen in the tree: panos.base-<plat>-<role> and panos-<plat>-<role>.
+    tokens = [f"panos.base-{tgt.name}", f"panos-{tgt.name}"]
+    found = []
+    for tok in tokens:
+        found += list(src.glob(f"**/.bld/{tok}/**/*.compile_db"))
+    return found
+
+
+def resolve_targets(repo: Path, args) -> list:
+    """Cartesian product of --platforms x roles(--rpms) -> target tokens.
+
+    - --rpms given: roles come from the RPM_ROLES map for those RPM types.
+    - --rpms omitted: use whichever roles already have build fragments on disk
+      for each platform (so `--platforms 5500` just indexes what you've built).
+    """
+    if not args.platforms:
+        die("nothing to do: pass --platforms (with optional --rpms), --use, --list or --clean")
+    platforms = [p for p in args.platforms.split(",") if p]
+
+    roles = None
+    if args.rpms:
+        roles = []
+        for rpm in args.rpms.split(","):
+            rpm = rpm.strip()
+            if rpm not in RPM_ROLES:
+                die(f"unknown rpm '{rpm}' (valid: {', '.join(RPM_ROLES)})")
+            for r in RPM_ROLES[rpm]:
+                if r not in roles:
+                    roles.append(r)
+
+    targets = []
+    for plat in platforms:
+        if roles is not None:
+            wanted = roles
+        else:
+            # Auto-detect roles that have fragments for this platform.
+            wanted = [r for r in ALL_ROLES
+                      if list_fragments(repo, Target(repo, f"{plat}-{r}"))]
+            if not wanted:
+                die(f"no build fragments found for platform '{plat}'; "
+                    f"specify --rpms to build (e.g. --rpms idpfs) and --do build")
+        for r in wanted:
+            tok = f"{plat}-{r}"
+            if tok not in targets:
+                targets.append(tok)
+    return targets
+
+
+# ---- stages ----------------------------------------------------------------
+
+def stage_build(repo: Path, tgt: Target, args):
+    """Invoke build-rpms for this target's platform+role RPM."""
+    rpm = None
+    if args.rpms:
+        # pick the RPM (from --rpms) that yields this role
+        for r in args.rpms.split(","):
+            r = r.strip()
+            if tgt.role in RPM_ROLES.get(r, []):
+                rpm = r
+                break
+    if rpm is None:
+        for r, roles in RPM_ROLES.items():
+            if tgt.role in roles:
+                rpm = r
+                break
+    if rpm is None:
+        die(f"[build] cannot map role '{tgt.role}' to an RPM; pass --rpms")
+    build_cmd = [
+        "python3",
+        str(repo / ".agents/skills/build-rpms/build_rpms.py"),
+        "--platform", tgt.plat, "--rpm", rpm,
+    ]
+    r = run(build_cmd)
+    if r.returncode != 0:
+        die(f"[build] build-rpms failed for {tgt.name} (rpm={rpm})")
+
+
+def stage_collect(repo: Path, tgt: Target, args):
+    """Filter fragments to THIS target, de-dup by 'file', write compile_commands.json."""
+    frag = list_fragments(repo, tgt)
+    if not frag:
+        die(f"[collect] no .compile_db fragments for {tgt.name}; build it first "
+            f"(e.g. --platforms {tgt.plat} --rpms <rpm> --do build) "
+            f"or check the platform-role token")
+    entries = []
+    for f in frag:
+        try:
+            txt = f.read_text().strip().rstrip(",")
+            if txt:
+                entries.append(json.loads(txt))
+        except json.JSONDecodeError as e:
+            info(f"[collect] skip {f}: {e}")
+
+    # De-dup by 'file' (guard rail): each .c must appear once for this target.
+    seen = {}
+    dupes = 0
+    for e in entries:
+        key = e.get("file")
+        if key in seen:
+            dupes += 1
+            continue
+        seen[key] = e
+    if dupes:
+        info(f"[collect] WARNING: dropped {dupes} duplicate 'file' entries within {tgt.name}")
+
+    tgt.dir.mkdir(parents=True, exist_ok=True)
+    tgt.ccjson.write_text(json.dumps(list(seen.values()), indent=2))
+    info(f"[collect] wrote {len(seen)} entries -> {tgt.ccjson}")
+
+
+def stage_index(repo: Path, tgt: Target, args):
+    """Run clangd-indexer-16 in-container: compile_commands.json -> panos.idx."""
+    if not tgt.ccjson.exists():
+        die(f"[index] {tgt.ccjson} missing; run the 'collect' stage first")
+    tgt.dir.mkdir(parents=True, exist_ok=True)
+    # clangd-indexer drives clang semantics even for gcc/cc compile commands, so
+    # it must be told where the clang-16 builtin headers live (stddef.h, stdarg.h,
+    # etc.). Without this, every TU whose command is gcc/cc fails with
+    # "'stddef.h' file not found". The resource-include dir is fixed in the kettle
+    # image at /usr/lib64/clang/16/include (matches clangd-16 / clangd-indexer-16).
+    inner = (
+        f"{INDEXER} --executor=all-TUs "
+        f"--extra-arg=-isystem --extra-arg=/usr/lib64/clang/16/include "
+        f"{tgt.ccjson} > {tgt.idx}"
+    )
+    cmd = [
+        "docker", "run", "--rm",
+        "--user", f"{os.getuid()}:{os.getgid()}",
+        "-v", "/home/lexli:/home/lexli",
+        "-w", str(tgt.dir),
+        "-e", "HOME=/home/lexli",
+        "-e", "PATH=/home/lexli/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        detect_image(repo),
+        "bash", "-c", inner,
+    ]
+    t0 = time.time()
+    r = run(cmd)
+    if r.returncode != 0 or not tgt.idx.exists() or tgt.idx.stat().st_size == 0:
+        die(f"[index] indexer failed for {tgt.name}")
+    info(f"[index] built {tgt.idx} ({tgt.idx.stat().st_size} bytes) in {time.time()-t0:.0f}s")
+
+
+def write_meta(repo: Path, tgt: Target):
+    try:
+        head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
+            text=True).strip()
+    except Exception:
+        head = "unknown"
+    n = 0
+    if tgt.ccjson.exists():
+        try:
+            n = len(json.loads(tgt.ccjson.read_text()))
+        except Exception:
+            pass
+    tgt.meta.write_text(json.dumps({
+        "target": tgt.name,
+        "entries": n,
+        "git_head": head,
+        "built_at": datetime.now(timezone.utc).isoformat(),
+        "indexer": os.path.basename(INDEXER),
+    }, indent=2))
+
+
+def activate(repo: Path, name: str):
+    active = repo / ".lsp" / "active"
+    active.parent.mkdir(parents=True, exist_ok=True)
+    active.write_text(name + "\n")
+    info(f"[use] .lsp/active -> {name}")
+    info("done. In nvim run :LspRestart (or reopen) to load the active target.")
+
+
+# ---- top-level commands ----------------------------------------------------
+
+def cmd_list(repo: Path):
+    targets_dir = repo / ".lsp" / "targets"
+    active = ""
+    af = repo / ".lsp" / "active"
+    if af.exists():
+        active = af.read_text().strip()
+    if not targets_dir.exists():
+        print("no targets built yet (run: lsp-ready --platforms <plat> --rpms <rpm>)")
+        if not active:
+            print("active: NONE (clangd will use fallback flags)")
+        return
+    for d in sorted(targets_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        mark = " *ACTIVE*" if d.name == active else ""
+        has_idx = (d / "panos.idx").exists()
+        print(f"  {d.name}{mark}  index={'yes' if has_idx else 'NO'}")
+    if not active:
+        print("active: NONE (clangd will use fallback flags — run lsp-ready --use <target>)")
+    elif not (targets_dir / active).exists():
+        print(f"active: {active} (WARNING: target dir missing)")
+
+
+def cmd_clean(repo: Path, name: str):
+    import shutil
+    base = repo / ".lsp" / "targets"
+    if name == "all":
+        if not base.exists() or not any(base.iterdir()):
+            info("nothing to clean: no targets built")
+            return
+        for d in sorted(base.iterdir()):
+            if d.is_dir():
+                shutil.rmtree(d)
+                info(f"removed {d}")
+        return
+    d = base / name
+    if d.exists():
+        shutil.rmtree(d)
+        info(f"removed {d}")
+    else:
+        info(f"nothing to clean: {d} does not exist")
+
+
+def main():
+    def fmt(prog):
+        # Wide help column so each option's description stays on one line.
+        return argparse.RawTextHelpFormatter(prog, max_help_position=40, width=100)
+
+    ap = argparse.ArgumentParser(
+        prog="lsp-ready",
+        description="Make a PAN-OS worktree LSP-ready for platform/role targets.",
+        formatter_class=fmt)
+    ap.add_argument("--platforms", metavar="<7500,5500,..>",
+                    help="comma for multiple")
+    ap.add_argument("--rpms", metavar="<mpfs,dpfs,idpfs>",
+                    help="comma for multiple")
+    ap.add_argument("--do", dest="do", metavar="<build,collect,index>",
+                    help="comma for multiple, by default all of them")
+    ap.add_argument("--use", metavar="<target>",
+                    help="use this target (e.g. 5500-dp, 7500-mp)")
+    ap.add_argument("--list", action="store_true",
+                    help="list ready targets and the active one")
+    ap.add_argument("--clean", metavar="<target|all>",
+                    help="remove cached artifacts for target, or 'all'")
+    ap.add_argument("--dry-run", action="store_true", help="")
+
+    # No arguments at all -> print help and exit (don't fall through to the
+    # build-stage guard, which would emit a confusing --rpms error).
+    if len(sys.argv) == 1:
+        ap.print_help()
+        return
+
+    args = ap.parse_args()
+
+    repo = find_repo(Path.cwd())
+
+    # Simple sub-commands first.
+    if args.list:
+        return cmd_list(repo)
+    if args.clean:
+        return cmd_clean(repo, args.clean)
+    if args.use:
+        tgt = Target(repo, args.use)  # validates shape
+        if not tgt.dir.exists():
+            die(f"--use {args.use}: target not built "
+                f"(run: lsp-ready --platforms {tgt.plat} --rpms <rpm>)")
+        return activate(repo, tgt.name)
+
+    # Stage selection: default is all three (build, collect, index).
+    if args.do:
+        stages = [s.strip() for s in args.do.split(",") if s.strip()]
+        for s in stages:
+            if s not in STAGES:
+                die(f"unknown stage '{s}' (valid: {', '.join(STAGES)})")
+        stages = [s for s in STAGES if s in stages]  # canonical order
+    else:
+        stages = list(STAGES)
+
+    # The build stage needs to know which RPM to build for each role, so --rpms
+    # is required whenever 'build' is in the stage list.
+    if "build" in stages and not args.rpms:
+        die("--do includes 'build' but --rpms not given "
+            "(e.g. --rpms idpfs). Use --do collect,index to skip building.")
+
+    targets = resolve_targets(repo, args)
+
+    if args.dry_run:
+        info(f"repo: {repo}")
+        info(f"targets: {targets}")
+        info(f"stages: {stages}")
+        return
+
+    stage_fns = {
+        "build": stage_build,
+        "collect": stage_collect,
+        "index": stage_index,
+    }
+
+    for name in targets:
+        tgt = Target(repo, name)
+        info(f"=== target {name} : stages {stages} ===")
+        for st in stages:
+            stage_fns[st](repo, tgt, args)
+        if "collect" in stages or "index" in stages:
+            write_meta(repo, tgt)
+
+
+if __name__ == "__main__":
+    main()

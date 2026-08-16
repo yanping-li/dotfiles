@@ -32,6 +32,29 @@ if [ -z "${REPO:-}" ]; then
   REPO="/home/lexli/pan/wte"
 fi
 
+# --- detect the kettle build image from the worktree's build config ---------
+# The image is NOT fixed across branches/worktrees. src/mk/config/dock.mk is the
+# authoritative source: REGISTRY / DOCK_IMAGE_NAME / PAN_KETTLE_VERSION. Parse
+# them so clangd always runs in the SAME toolchain the build uses. Order of
+# precedence: $PANLSP_IMAGE override > parsed from dock.mk > hard-coded fallback.
+detect_image() {
+  local dockmk="$REPO/src/mk/config/dock.mk"
+  local fallback="docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056"
+  [ -n "${PANLSP_IMAGE:-}" ] && { echo "$PANLSP_IMAGE"; return; }
+  [ -f "$dockmk" ] || { echo "$fallback"; return; }
+  local mkval reg name ver
+  mkval() { grep -E "^[[:space:]]*$1[[:space:]]*[:?]?=" "$dockmk" | head -1 \
+              | sed -E 's/.*=[[:space:]]*//; s/[[:space:]]+#.*//; s/[[:space:]]+$//'; }
+  reg="$(mkval REGISTRY)"; name="$(mkval DOCK_IMAGE_NAME)"; ver="$(mkval PAN_KETTLE_VERSION)"
+  if [ -n "$reg" ] && [ -n "$name" ] && [ -n "$ver" ]; then
+    echo "$reg/$name:$ver"
+  else
+    echo "$fallback"
+  fi
+}
+KETTLE_IMAGE="$(detect_image)"
+echo "docker-clangd: kettle image: $KETTLE_IMAGE" >&2
+
 ACTIVE_FILE="$REPO/.lsp/active"
 TARGET=""
 [ -f "$ACTIVE_FILE" ] && TARGET="$(tr -d '[:space:]' < "$ACTIVE_FILE")"
@@ -60,7 +83,7 @@ exec docker run --rm -i \
   -e HOME="$CACHE_HOME" \
   -e USER="lexli" \
   -e PATH="/home/lexli/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-  docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056 \
+  "$KETTLE_IMAGE" \
   /home/lexli/.local/bin/clangd-16 \
     "${CLANGD_ARGS[@]}" \
     "$@"
