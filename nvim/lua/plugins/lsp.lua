@@ -99,7 +99,19 @@ function M.setup()
             vim.lsp.stop_client(client.id)
         end
         vim.defer_fn(function()
-            vim.cmd("edit")
+            -- Re-trigger LSP attach by reloading the buffer. Guard against
+            -- no-name buffers (bare :edit errors with E32: No file name).
+            if not vim.api.nvim_buf_is_valid(bufnr) then
+                return
+            end
+            if vim.api.nvim_buf_get_name(bufnr) == "" then
+                vim.notify("LspReset: buffer has no file; clients stopped, nothing to re-attach",
+                    vim.log.levels.WARN)
+                return
+            end
+            vim.api.nvim_buf_call(bufnr, function()
+                vim.cmd("edit")
+            end)
         end, 500)
     end, { desc = "Reset (restart) LSP client(s) for the current buffer" })
 
