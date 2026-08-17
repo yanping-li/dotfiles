@@ -134,7 +134,11 @@ DPFS_PLATFORMS=" 7000 7000b 5400 5200 3200 800 220 vm vmarm ctnr "
 rpms_for_platform() {
     local p=" $1 "
     if [[ "$IDPFS_PLATFORMS" == *"$p"* ]]; then
-        echo "idpfs"
+        # idpfs HW platforms are real firewalls: they have a management plane
+        # (mpfs -> mp role) AND a data plane (idpfs -> dp role, plus cp on 7500).
+        # idpfs alone only builds the dp side, leaving <plat>-mp with no index,
+        # so build mpfs too. All idpfs platforms are also in mpfs PLATFORM_SUPPORT.
+        echo "mpfs,idpfs"
     elif [[ "$DPFS_PLATFORMS" == *"$p"* ]]; then
         echo "mpfs,dpfs"          # vm etc.: build both MP and DP roles
     else
