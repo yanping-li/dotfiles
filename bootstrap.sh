@@ -174,6 +174,26 @@ function installCliTools() {
 
     rm -rf "$tmp"
 
+    # Install our own LSP helper scripts into ~/.local/bin. These drive
+    # clangd-16 / clangd-indexer-16 for per-platform PAN-OS LSP:
+    #   lsp-panos       - build/collect/index per platform-role compile_commands.json
+    #                     + panos.idx, and save/use a shared compile_commands cache
+    #   lsp-panos-batch - prebuild that cache across many (version x platform) combos
+    #   docker-clangd   - clangd wrapper that reads <repo>/.lsp/active and injects
+    #                     --compile-commands-dir + --index-file for that target
+    local dotdir
+    dotdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -d "$dotdir/bin" ]; then
+        echo "Installing LSP helper scripts to ~/.local/bin ..."
+        for f in lsp-panos lsp-panos-batch docker-clangd; do
+            if [ -f "$dotdir/bin/$f" ]; then
+                install -m 755 "$dotdir/bin/$f" ~/.local/bin/"$f" \
+                    && echo "  installed $f" \
+                    || echo "  WARN: failed to install $f"
+            fi
+        done
+    fi
+
     if ! command -v make &>/dev/null || ! command -v cc &>/dev/null; then
         echo "WARN: make/cc not found - telescope-fzf-native (C sorter) will not compile."
         echo "      Install a C toolchain (e.g. build-essential) for faster fuzzy matching."

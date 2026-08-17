@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+#
+# lsp-panos-batch — prebuild the LSP cache for many (version x platform) combos.
+#
+# For each --version, in the given --worktree:
+#   1. git fetch (tags), checkout a throwaway branch  lex-<version>-lsp  reset
+#      HARD to the version tag/ref,
+#   2. make clobber          (clean build between versions),
+#   3. lsp-panos --platforms <p> --rpms <rpm> --do build,collect,index
+#      for each platform (rpm auto-derived per platform),
+#   4. lsp-panos --save-cache --as <version>   (store compile_commands.json under
+#      the version key in the shared cache).
+#
+# Progress + ETA are printed at the version level and the platform level, based
+# on the running average time per unit, so a long unattended run is legible.
+#
+# The cache produced here is what a fresh worktree pulls in via
+#   lsp-panos --use-cache <platform> --from <version>
+#
+# Only compile_commands.json is cached; panos.idx is re-indexed locally on import.
+#
+# Usage:
+#   lsp-panos-batch --worktree /home/lexli/pan/wtd \
+#                   --platforms vm,7500,5500 \
+#                   --version 11.1.7,12.1.5,12.2.0
+#
+# Options:
+#   --worktree <path>        worktree to build in (required)
+#   --platforms <a,b,..>     comma-separated platforms (required)
+#   --version   <a,b,..>     comma-separated version tags/refs (required)
+#   --lsp-panos <path>       path to lsp-panos (default: lsp-panos on PATH)
+#   --no-clobber             skip 'make clobber' between versions (faster, dirtier)
+#   --no-rpm                 compile-only, skip rpmbuild packaging (DEFAULT; faster)
+#   --rpm                    build full RPMs (slower; only if you need the .rpm)
+#   --keep-going             continue to the next version/platform on failure
+#   --dry-run                print what would run, do nothing
+#
+# Platforms that a given --version's branch does not support (per its own
+# pkg/pandb_source/targets_3x.py) are skipped for that version with a message,
+# so the same --platforms list can be reused across old and new branches.
+#
+set -u
+
+# ---- defaults --------------------------------------------------------------
+WORKTREE=""
+PLATFORMS=""
+VERSIONS=""
+LSP_PANOS="lsp-panos"
+DO_CLOBBER=1
+KEEP_GOING=0
+DRY_RUN=0
+# Compile-only by default: we only need .compile_db fragments for LSP, so skip
+# rpmbuild packaging. Pass --rpm to build full RPMs instead.
+NO_RPM=1
+
+die()  { echo "lsp-panos-batch: ERROR: $*" 1>&2; exit 1; }
+info() { echo "lsp-panos-batch: $*"; }
+
+# Format a duration in seconds as h:mm:ss (or m:ss under an hour).
+fmt_dur() {
+    local s=$1 h m
+    h=$(( s / 3600 )); m=$(( (s % 3600) / 60 )); s=$(( s % 60 ))
+    if [ "$h" -gt 0 ]; then printf '%d:%02d:%02d' "$h" "$m" "$s"
+    else printf '%d:%02d' "$m" "$s"; fi
+}
+
+# progress <done> <total> <start_epoch> <label>
+# Prints "<label>: done/total  elapsed X  ETA Y" using average time per unit.
+progress() {
+    local done=$1 total=$2 start=$3 label=$4
+    local now elapsed avg remaining eta
+    now=$(date +%s); elapsed=$(( now - start ))
+    if [ "$done" -gt 0 ]; then
+        avg=$(( elapsed / done )); remaining=$(( (total - done) * avg ))
+        eta="ETA $(fmt_dur "$remaining")"
+    else
+        eta="ETA --:--"
+    fi
+    info "PROGRESS $label: $done/$total  elapsed $(fmt_dur "$elapsed")  $eta"
+}
+
+run() {
+    info "+ $*"
+    [ "$DRY_RUN" -eq 1 ] && return 0
+    "$@"
+}
+
+# ---- parse args ------------------------------------------------------------
+# No arguments -> print help and exit (avoids a confusing required-arg error).
+if [ $# -eq 0 ]; then
+    sed -n '2,40p' "$0"
+    exit 0
+fi
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --worktree)   WORKTREE="$2"; shift 2 ;;
+        --platforms)  PLATFORMS="$2"; shift 2 ;;
+        --version)    VERSIONS="$2"; shift 2 ;;
+        --lsp-panos)  LSP_PANOS="$2"; shift 2 ;;
+        --no-clobber) DO_CLOBBER=0; shift ;;
+        --no-rpm)     NO_RPM=1; shift ;;
+        --rpm)        NO_RPM=0; shift ;;
+        --keep-going) KEEP_GOING=1; shift ;;
+        --dry-run)    DRY_RUN=1; shift ;;
+        -h|--help)
+            sed -n '2,40p' "$0"; exit 0 ;;
+        *) die "unknown option '$1' (see --help)" ;;
+    esac
+done
+
+[ -n "$WORKTREE" ]  || die "--worktree is required"
+[ -n "$PLATFORMS" ] || die "--platforms is required"
+[ -n "$VERSIONS" ]  || die "--version is required"
+# Strip a trailing slash so "$WORKTREE/src" is not "//src" and PAN_BUILD_DIR is
+# clean (a raw "make -C .../ clobber" resolved $(PAN_BUILD_DIR) to "" -> looked
+# for /src/mk/dir.mk and failed).
+WORKTREE="${WORKTREE%/}"
+[ -d "$WORKTREE/src" ] && [ -e "$WORKTREE/.git" ] || die "not a worktree (no src/ + .git): $WORKTREE"
+command -v "$LSP_PANOS" >/dev/null 2>&1 || [ -x "$LSP_PANOS" ] || die "lsp-panos not found: $LSP_PANOS"
+
+IFS=',' read -r -a PLAT_ARR <<< "$PLATFORMS"
+IFS=',' read -r -a VER_ARR  <<< "$VERSIONS"
+
+NVER=${#VER_ARR[@]}
+NPLAT=${#PLAT_ARR[@]}
+
+# ---- platform -> rpm mapping (mirrors lsp-panos PLATFORM_SUPPORT) ----------
+# idpfs platforms build cp+dp in one rpm; vm/dpfs platforms use mpfs+dpfs;
+# everything else falls back to mpfs. Keep in sync with lsp-panos.
+IDPFS_PLATFORMS=" 7500 5400 1600 1400 1500 3400 5400f 5500 3500 5500l 400 500s 500f "
+DPFS_PLATFORMS=" 7000 7000b 5400 5200 3200 800 220 vm vmarm ctnr "
+
+rpms_for_platform() {
+    local p=" $1 "
+    if [[ "$IDPFS_PLATFORMS" == *"$p"* ]]; then
+        echo "idpfs"
+    elif [[ "$DPFS_PLATFORMS" == *"$p"* ]]; then
+        echo "mpfs,dpfs"          # vm etc.: build both MP and DP roles
+    else
+        echo "mpfs"
+    fi
+}
+
+# supported_platforms - print the space-separated set of platform tokens the
+# currently checked-out branch actually supports, read from the authoritative
+# build matrix  pkg/pandb_source/targets_3x.py.  Must be called AFTER
+# 'git reset --hard <ver>' so it reflects each version's own matrix (older
+# branches lack newer platforms).  The 'm'/'pc' pseudo-tokens are excluded.
+# Empty output means the file was missing/unreadable -> caller should not
+# filter (fail open).
+SUPPORT_FILE="pkg/pandb_source/targets_3x.py"
+supported_platforms() {
+    local f="$WORKTREE/$SUPPORT_FILE"
+    [ -f "$f" ] || return 0
+    grep -oE "'platforms': *'[^']*'" "$f" \
+        | sed -E "s/'platforms': *'//; s/'//" \
+        | tr ',' '\n' \
+        | sed 's/^ *//; s/ *$//' \
+        | sort -u \
+        | grep -vE '^(m|pc|)$' \
+        | tr '\n' ' '
+}
+
+# ---- run bookkeeping -------------------------------------------------------
+RUN_START=$(date +%s)
+FAILED=()
+# Per-job (version x platform) outcomes for the end-of-run summary. Each entry is
+#   "<ver>|<plat>|<rpm>|<status>|<seconds>"
+# status is one of: OK, FAIL, SKIP (platform unsupported on branch), DRYRUN.
+JOB_RESULTS=()
+record_job() {   # record_job <ver> <plat> <rpm> <status> <seconds>
+    JOB_RESULTS+=("$1|$2|$3|$4|$5")
+}
+
+process_version() {
+    local ver="$1" vidx="$2"          # vidx: 1-based index of this version
+    local branch="lex-${ver}-lsp"
+    local vstart; vstart=$(date +%s)
+
+    info "==================================================================="
+    info "VERSION [$vidx/$NVER] $ver  (worktree $WORKTREE, branch $branch)"
+    progress "$(( vidx - 1 ))" "$NVER" "$RUN_START" "versions"
+    info "==================================================================="
+
+    run git -C "$WORKTREE" fetch --tags --prune origin || {
+        info "WARNING: git fetch failed for $ver (continuing with local refs)"
+    }
+
+    # Fresh throwaway branch reset hard to the version. -B is create-or-reset so
+    # a re-run is idempotent (plain -b would fail if the branch already exists).
+    run git -C "$WORKTREE" checkout -B "$branch" || {
+        info "checkout -B failed; trying detach + branch recreate"
+        run git -C "$WORKTREE" checkout --detach || return 1
+        run git -C "$WORKTREE" branch -D "$branch" 2>/dev/null || true
+        run git -C "$WORKTREE" checkout -b "$branch" || return 1
+    }
+    run git -C "$WORKTREE" reset --hard "$ver" || return 1
+
+    # Determine which of the requested platforms this branch actually supports.
+    # Some platforms do not exist on older branches/versions; building them
+    # would just fail, so skip them up-front with a clear message.
+    local supported; supported=" $(supported_platforms) "
+    if [ "$supported" = "  " ]; then
+        info "[$ver] WARNING: cannot read $SUPPORT_FILE; not filtering platforms"
+        supported=""     # empty sentinel -> treat every platform as supported
+    fi
+
+    # Clean build between versions is done PER PLATFORM via lsp-panos --clobber,
+    # which forwards build_rpms.py --cleanup (CLOBBER=1) so the clean happens
+    # INSIDE the build container. A bare host 'make clobber' does not work here
+    # (no PAN_BUILD_TARGETS, cannot write .buildnum), and leftover .bld artifacts
+    # from a different version produce bogus link/compile errors when indexing.
+    local clobber_flag=""
+    [ "$DO_CLOBBER" -eq 1 ] && clobber_flag="--clobber"
+    local norpm_flag=""
+    [ "$NO_RPM" -eq 1 ] && norpm_flag="--no-rpm"
+
+    # Build/collect/index each platform (rpm auto-derived).
+    local plat rpm rc plat_failed=0 pidx=0
+    local pstart; pstart=$(date +%s)
+    for plat in "${PLAT_ARR[@]}"; do
+        [ -n "$plat" ] || continue
+        pidx=$(( pidx + 1 ))
+        rpm="$(rpms_for_platform "$plat")"
+        if [ -n "$supported" ] && [[ "$supported" != *" $plat "* ]]; then
+            info "--- [$ver] platform [$pidx/$NPLAT] $plat : NOT supported on this branch, skipping ---"
+            record_job "$ver" "$plat" "$rpm" SKIP 0
+            continue
+        fi
+        info "--- [$ver] platform [$pidx/$NPLAT] $plat (rpm=$rpm) : build,collect,index ---"
+        progress "$(( pidx - 1 ))" "$NPLAT" "$pstart" "$ver platforms"
+        if [ "$DRY_RUN" -eq 1 ]; then
+            info "+ (cd $WORKTREE && $LSP_PANOS --platforms $plat --rpms $rpm $clobber_flag $norpm_flag --do build,collect,index)"
+            record_job "$ver" "$plat" "$rpm" DRYRUN 0
+            continue
+        fi
+        local t0; t0=$(date +%s)
+        ( cd "$WORKTREE" && "$LSP_PANOS" --platforms "$plat" --rpms "$rpm" $clobber_flag $norpm_flag --do build,collect,index )
+        rc=$?
+        local elapsed=$(( $(date +%s) - t0 ))
+        info "[$ver/$plat] took $(fmt_dur "$elapsed")"
+        if [ $rc -ne 0 ]; then
+            info "WARNING: lsp-panos failed for $ver/$plat (rc=$rc)"
+            record_job "$ver" "$plat" "$rpm" FAIL "$elapsed"
+            plat_failed=1
+            [ "$KEEP_GOING" -eq 1 ] || return 1
+        else
+            record_job "$ver" "$plat" "$rpm" OK "$elapsed"
+        fi
+    done
+    progress "$NPLAT" "$NPLAT" "$pstart" "$ver platforms"
+
+    # Save whatever built for this version under the version key.
+    info "--- [$ver] save-cache --as $ver ---"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        info "+ (cd $WORKTREE && $LSP_PANOS --save-cache --as $ver)"
+    else
+        ( cd "$WORKTREE" && "$LSP_PANOS" --save-cache --as "$ver" ) || {
+            info "WARNING: save-cache failed for $ver"
+            return 1
+        }
+    fi
+
+    info "[$ver] version done in $(fmt_dur $(( $(date +%s) - vstart )))"
+    [ "$plat_failed" -eq 0 ]
+}
+
+vidx=0
+for ver in "${VER_ARR[@]}"; do
+    [ -n "$ver" ] || continue
+    vidx=$(( vidx + 1 ))
+    if ! process_version "$ver" "$vidx"; then
+        FAILED+=("$ver")
+        if [ "$KEEP_GOING" -eq 0 ]; then
+            die "stopping at version '$ver' (use --keep-going to continue past failures)"
+        fi
+    fi
+done
+
+# ---- summary ---------------------------------------------------------------
+progress "$NVER" "$NVER" "$RUN_START" "versions"
+
+# Per-job (version x platform) table: one row per attempted job, with status and
+# duration. OK/FAIL/SKIP/DRYRUN come from record_job in the platform loop.
+n_ok=0; n_fail=0; n_skip=0; n_dry=0
+info "==================================================================="
+info "JOB SUMMARY  (version / platform / rpm / status / time)"
+info "-------------------------------------------------------------------"
+if [ "${#JOB_RESULTS[@]}" -eq 0 ]; then
+    info "  (no jobs ran)"
+else
+    for row in "${JOB_RESULTS[@]}"; do
+        IFS='|' read -r j_ver j_plat j_rpm j_status j_secs <<< "$row"
+        case "$j_status" in
+            OK)     n_ok=$((   n_ok   + 1 )) ;;
+            FAIL)   n_fail=$(( n_fail + 1 )) ;;
+            SKIP)   n_skip=$(( n_skip + 1 )) ;;
+            DRYRUN) n_dry=$((  n_dry  + 1 )) ;;
+        esac
+        printf 'lsp-panos-batch:   %-9s %-9s %-10s %-6s %s\n' \
+            "$j_ver" "$j_plat" "$j_rpm" "$j_status" "$(fmt_dur "${j_secs:-0}")"
+    done
+fi
+info "-------------------------------------------------------------------"
+info "TOTALS: $n_ok ok, $n_fail failed, $n_skip skipped, $n_dry dry-run  (${#JOB_RESULTS[@]} jobs)"
+info "==================================================================="
+if [ "${#FAILED[@]}" -eq 0 ] && [ "$n_fail" -eq 0 ]; then
+    info "DONE: all $NVER version(s) processed OK in $(fmt_dur $(( $(date +%s) - RUN_START )))"
+    exit 0
+fi
+info "DONE with failures: versions=[${FAILED[*]}]  failed-jobs=$n_fail  (total $(fmt_dur $(( $(date +%s) - RUN_START ))))"
+exit 1

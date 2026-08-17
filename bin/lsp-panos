@@ -16,7 +16,17 @@ disk, e.g. --platforms 5500 --rpms idpfs -> 5500-cp,5500-dp;
 Stages:  build -> collect -> index   (choose with --do; default: all three)
 Switch the active target with --use <target>.
 
-See design: .plans/nvim/2026-08-15_per-platform-lsp-design.md
+Cache store (shared prebuild of compile_commands.json ONLY; panos.idx is always
+re-indexed locally after import). Layout under CACHE_ROOT is three tiers:
+    <version-key>/<platform>/<target>/compile_commands.json
+where <version-key> defaults to the most recent git tag (git describe --tags
+--abbrev=0, e.g. 13.1.0-c866.main_rel), overridable via --from/--as.
+    --list-cache                       show the store, grouped by version/platform/target
+    --use-cache <platform> [rpm]       import that platform's cached cc, then index
+    --save-cache                       save built cc into the store (standalone or after a run)
+Override the auto-detected branch key with --from (use) / --as (save).
+
+See design: .plans/nvim/2026-08-16_lsp-cache-sharing-design.md
 """
 
 import argparse
@@ -38,6 +48,72 @@ STAGES = ["build", "collect", "index"]
 KETTLE_IMAGE_FALLBACK = "docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056"
 INDEXER = "/home/lexli/.local/bin/clangd-indexer-16"
 CLANGD = "/home/lexli/.local/bin/clangd-16"
+
+# The indexer runs INSIDE a container, not on the host: the compile commands
+# reference 3rd-party headers (Python.h, libxml/tree.h, ...) and the clang-16
+# builtin includes that live in the kettle image, not on the host. Running the
+# host clangd-indexer-16 bare left ~dozens of TUs failing with "file not found".
+# We therefore run the (bind-mounted) host clangd-indexer-16 INSIDE an image that
+# has all those headers. The image must also be new enough to run the host binary
+# (GLIBC>=2.34); a worktree's own kettle image can be too old (11.1.0-* = clang-10
+# / GLIBC<2.34), so we use the worktree image only when new enough, else a known-
+# good modern default. See indexer_image() / image_glibc_ok().
+INDEXER_IMAGE_DEFAULT = "docker-kettle.af.paloaltonetworks.local/kettle-panos:13.1.0-3056"
+# Minimum container GLIBC needed to run the host clangd-indexer-16.
+INDEXER_MIN_GLIBC = (2, 34)
+
+# Shared cache store for prebuilt compile_commands.json (only that file is
+# cached — panos.idx is NOT, it is re-indexed locally after import). Layout is
+# three tiers: <version-key>/<platform>/<target>/compile_commands.json, so one
+# branch can hold many platforms and each platform many role/variant targets.
+# See design: .plans/nvim/2026-08-16_lsp-cache-sharing-design.md
+CACHE_ROOT = Path("/home/lexli/pan/panos-lsp")
+
+# Token substituted for the worktree root inside a cached compile_commands.json.
+# On save we rewrite each entry's absolute 'directory' -> @REPO@; on use we
+# rewrite @REPO@ -> the importing worktree root. 'file'/'-o' are relative to
+# 'directory', so fixing 'directory' alone relocates every entry deterministically.
+REPO_PLACEHOLDER = "@REPO@"
+
+
+_GLIBC_OK_CACHE = {}
+
+
+def image_glibc_ok(image: str) -> bool:
+    """True if the image container GLIBC is >= INDEXER_MIN_GLIBC (memoized).
+
+    Probe with 'ldd --version'. On any error (missing image, docker failure)
+    return False so we fall back to the known-good default rather than launch a
+    run that would die with 'GLIBC ... not found'."""
+    if image in _GLIBC_OK_CACHE:
+        return _GLIBC_OK_CACHE[image]
+    try:
+        out = subprocess.check_output(
+            ["docker", "run", "--rm", image, "bash", "-lc", "ldd --version | head -1"],
+            text=True, stderr=subprocess.DEVNULL, timeout=120)
+        m = re.search(r"(\d+)\.(\d+)", out)
+        ok = bool(m) and (int(m.group(1)), int(m.group(2))) >= INDEXER_MIN_GLIBC
+    except Exception:
+        ok = False
+    _GLIBC_OK_CACHE[image] = ok
+    return ok
+
+
+def indexer_image(repo: Path) -> str:
+    """Image to run the indexer in. $PANLSP_INDEXER_IMAGE wins; else the
+    worktree's own kettle image if it is new enough to run the host binary; else
+    the known-good modern default. The worktree image is preferred because it has
+    the exact 3rd-party headers the build used."""
+    env = os.environ.get("PANLSP_INDEXER_IMAGE")
+    if env:
+        return env
+    wt = detect_image(repo)
+    if image_glibc_ok(wt):
+        return wt
+    info(f"[index] worktree image {wt} is too old to run the indexer "
+         f"(needs GLIBC>={INDEXER_MIN_GLIBC[0]}.{INDEXER_MIN_GLIBC[1]}); "
+         f"using {INDEXER_IMAGE_DEFAULT} instead")
+    return INDEXER_IMAGE_DEFAULT
 
 
 def detect_image(repo: Path) -> str:
@@ -103,10 +179,69 @@ PLATFORM_SUPPORT = {
 DPFS_NON_X86_PLATFORMS = {"7000b", "5400", "7000", "5200", "3200", "800", "220"}
 
 
+# PAN_BUILD_TARGETS passed to `make -C src` for the compile-only (--no-rpm) path.
+# These mirror the make lines in the RPM spec %install sections:
+#   pkg/specs/apps-panos-mpfs.spec  : panos-<p>-mp
+#   pkg/specs/apps-panos-dpfs.spec  : panos-<p>-dp , panos-<p>-cp
+# mp/dpfs use the 'panos-' prefix and the same roles for every platform, so a flat
+# template is fine. idpfs is different: apps-panos-idpfs.spec %install picks the
+# targets per platform (some have a 'cp' role, most are dp-only), so idpfs is
+# handled separately by idpfs_targets() below.
+BUILD_TARGETS = {
+    "mpfs":  ["panos-{p}-mp"],
+    "dpfs":  ["panos-{p}-dp", "panos-{p}-cp"],
+}
+
+# idpfs is a 'panos.base' derivative build whose roles vary by platform. This
+# mirrors apps-panos-idpfs.spec %install exactly:
+#   7500                         -> panos.base-7500-cp + panos.base-7500-dp
+#   1600                         -> panos.sim-1600-cp
+#   400/1400/3400/5400f/5500 ... -> panos.base-<p>-dp   (dp-only; NO cp role)
+#   5400                         -> panos-5400-dp
+# Only 7500 has a 'cp' role in matrix.mk ROLEORDER; building panos.base-<p>-cp for
+# a dp-only platform expands to nothing -> "There are no BUILD TARGETS defined".
+IDPFS_CP_DP_PLATFORMS = {"7500"}          # cp + dp
+IDPFS_SIM_CP_PLATFORMS = {"1600"}         # panos.sim-<p>-cp
+IDPFS_PLAIN_DP_PLATFORMS = {"5400"}       # panos-<p>-dp (no 'base'/'sim')
+
+def idpfs_targets(plat):
+    """Return the list of PAN_BUILD_TARGETS to compile idpfs for this platform,
+    mirroring apps-panos-idpfs.spec %install. Everything not special-cased is a
+    dp-only 'panos.base-<p>-dp' build."""
+    if plat in IDPFS_CP_DP_PLATFORMS:
+        return [f"panos.base-{plat}-cp", f"panos.base-{plat}-dp"]
+    if plat in IDPFS_SIM_CP_PLATFORMS:
+        return [f"panos.sim-{plat}-cp"]
+    if plat in IDPFS_PLAIN_DP_PLATFORMS:
+        return [f"panos-{plat}-dp"]
+    return [f"panos.base-{plat}-dp"]
+
+
+def idpfs_roles(plat):
+    """Roles (cp/dp) that idpfs actually builds for this platform, derived from
+    idpfs_targets() so collect/index never resolve a phantom role. The role is
+    the last '-'-separated field of each build target (e.g. panos.base-5500-dp ->
+    'dp', panos.base-7500-cp -> 'cp'). Most idpfs platforms are dp-only; only
+    7500 has 'cp'."""
+    roles = []
+    for bt in idpfs_targets(plat):
+        r = bt.rsplit("-", 1)[-1]
+        if r not in roles:
+            roles.append(r)
+    return roles
+
+
 # ---- small utilities -------------------------------------------------------
 
 class StageError(Exception):
-    """A per-target stage failure that should skip the target, not abort the run."""
+    """A per-target stage failure that should skip the target, not abort the run.
+
+    skip=True marks a benign skip (the target/role simply does not exist on this
+    branch), so the overall run is NOT considered failed. skip=False (default) is
+    a real error that should count as a failure."""
+    def __init__(self, msg, skip=False):
+        super().__init__(msg)
+        self.skip = skip
 
 
 def die(msg, code=1):
@@ -123,25 +258,110 @@ def info(msg):
     print(f"lsp-panos: {msg}")
 
 
+def fmt_dur(seconds):
+    """Duration as h:mm:ss (or m:ss under an hour)."""
+    s = int(seconds)
+    h, m, s = s // 3600, (s % 3600) // 60, s % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def fmt_local(iso_utc):
+    """Render a stored UTC ISO timestamp in the machine's LOCAL time for display.
+
+    saved_at/built_at are stored in UTC (datetime.now(timezone.utc), '...+00:00').
+    Showing the raw UTC string without the offset looks like local time and is off
+    by the tz offset; convert to local and tag it so it is unambiguous."""
+    if not iso_utc or iso_utc == "?":
+        return "?"
+    try:
+        dt = datetime.fromisoformat(iso_utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+    except Exception:
+        return iso_utc[:19]
+
+
+def progress(done, total, start, label):
+    """Print done/total elapsed ETA using average time per unit."""
+    elapsed = time.time() - start
+    if done:
+        remaining = (total - done) * (elapsed / done)
+        eta = "ETA " + fmt_dur(remaining)
+    else:
+        eta = "ETA --:--"
+    info(f"PROGRESS {label}: {done}/{total}  elapsed {fmt_dur(elapsed)}  {eta}")
+
+
 def run(cmd, **kw):
     """Run a command, echoing it; raise on failure unless check=False."""
     info("+ " + " ".join(str(c) for c in cmd))
     return subprocess.run(cmd, **kw)
 
 
-def run_streamed(cmd, prefix):
+def run_streamed(cmd, prefix, watch=None):
     """Run a command, streaming its output line-buffered with a fixed prefix.
 
     The build sub-tool (build_rpms.py) prints its own timestamped lines; piping
     them raw interleaves with our messages and wraps badly. Reading line-by-line
     and re-emitting with a stable "  prefix| " keeps the log readable and grep-able.
-    Returns the process exit code.
+
+    'watch' may be a list of substrings to look for in the output; the set of
+    substrings actually seen is stashed on the function attribute
+    run_streamed.last_seen for the caller to inspect. Returns the exit code.
     """
+    watch = watch or []
+    run_streamed.last_seen = set()
     info("+ " + " ".join(str(c) for c in cmd))
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                         text=True, bufsize=1)
-    for line in p.stdout:
-        print(f"  {prefix}| {line.rstrip()}", flush=True)
+    # Read the child's combined stdout/stderr as a BYTE stream and re-emit one
+    # clean line at a time with a stable "  prefix| ".
+    #
+    # Two things conspire to produce a diagonal "staircase" otherwise:
+    #   1. build_rpms.py / docker emit progress frames terminated by a bare "\r"
+    #      (carriage return, no newline) that redraw a line in place.
+    #   2. build_rpms.py wraps the build in `script -qc`, which puts the REAL
+    #      controlling terminal into raw mode (ONLCR off) for the whole build.
+    #      While ONLCR is off a plain "\n" no longer returns the cursor to
+    #      column 0, so every line we print drifts right by the previous line.
+    # We therefore (a) treat BOTH "\r" and "\n" as line terminators when
+    # splitting, and (b) write each line as "\r ... \r\n" via a raw byte write so
+    # the cursor is forced to column 0 regardless of the terminal's ONLCR state.
+    # This is mode-independent and harmless when piped to a file.
+    # stdin=DEVNULL is important: build_rpms.py runs the build under `script`,
+    # which otherwise grabs OUR controlling terminal and flips it into raw mode
+    # (ONLCR off) for the whole build -> every subsequent line staircases. With
+    # no tty on stdin, `script` cannot touch the real terminal and ONLCR stays
+    # on. (The \r-hardened emit below is a belt-and-suspenders backup.)
+    p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         bufsize=0)
+    buf = bytearray()
+    out = sys.stdout
+
+    def emit(segment):
+        text = segment.decode("utf-8", "replace").rstrip()
+        if text.strip():
+            for w in watch:
+                if w in text:
+                    run_streamed.last_seen.add(w)
+            out.write(f"\r  {prefix}| {text}\r\n")
+            out.flush()
+
+    while True:
+        chunk = p.stdout.read(4096)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        # Split off every complete line ending in \r or \n; keep the trailing
+        # partial (no terminator yet) in buf for the next read.
+        start = 0
+        for i, b in enumerate(buf):
+            if b in (0x0A, 0x0D):       # \n or \r
+                emit(buf[start:i])
+                start = i + 1
+        del buf[:start]
+    if buf:                              # flush any final partial line
+        emit(bytes(buf))
     p.wait()
     return p.returncode
 
@@ -166,6 +386,90 @@ def parse_target(target: str):
         die(f"bad target '{target}' (expected <platform>-<role>[-<variant>], e.g. 5500-cp, 7500-cp-800g)")
     parts = target.split("-")
     return parts[0], parts[1]
+
+
+# ---- cache: version-key + path rewrite -------------------------------------
+
+def normalize_key(name: str) -> str:
+    """Sanitize a git branch name into a filesystem-safe cache version-key.
+
+    'release/11.1.14' -> 'release-11.1.14', 'devel/orion' -> 'devel-orion'.
+    Any '/' becomes '-'; other odd chars collapse to '-' too so the key is a
+    single path segment we can nest platforms/targets under.
+    """
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip().replace("/", "-")).strip("-")
+
+
+def version_key(repo: Path, override: str = None) -> str:
+    """The cache tier-1 key for this worktree: the most recent git tag.
+
+    The version tag (e.g. 13.1.0-c866.main_rel) identifies the actual code
+    baseline and is shared across worktrees on the same release, so it is a far
+    better cache key than a personal branch name. Precedence:
+      1. explicit override (--from/--as),
+      2. most recent reachable tag ('git describe --tags --abbrev=0' = the first
+         tag shown in git log),
+      3. fall back to the branch name if the tree has no tags,
+      4. give up (detached HEAD, no tags) and ask for an explicit key.
+    """
+    if override:
+        return normalize_key(override)
+    try:
+        tag = subprocess.check_output(
+            ["git", "-C", str(repo), "describe", "--tags", "--abbrev=0"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        tag = ""
+    if tag:
+        return normalize_key(tag)
+    try:
+        branch = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"],
+            text=True).strip()
+    except Exception:
+        branch = "HEAD"
+    if not branch or branch == "HEAD":
+        die("cannot determine a version-key (no reachable tag, detached HEAD); "
+            "pass --from/--as <version-key> (e.g. --as 13.1.0-c866.main_rel)")
+    return normalize_key(branch)
+
+
+def cc_to_placeholder(ccjson_path: Path, src_root: Path, out_path: Path) -> int:
+    """Copy compile_commands.json rewriting absolute worktree paths -> @REPO@.
+
+    'directory' is absolute and rooted at the source worktree; 'file' and the
+    '-o' output are relative to it, so replacing the worktree-root prefix with
+    the placeholder makes the file relocatable. Returns entry count.
+    """
+    entries = json.loads(ccjson_path.read_text())
+    root = str(src_root)
+    for e in entries:
+        d = e.get("directory", "")
+        if d == root:
+            e["directory"] = REPO_PLACEHOLDER
+        elif d.startswith(root + "/"):
+            e["directory"] = REPO_PLACEHOLDER + d[len(root):]
+    out_path.write_text(json.dumps(entries, indent=2))
+    return len(entries)
+
+
+def cc_from_placeholder(cached_path: Path, dst_root: Path, out_path: Path) -> int:
+    """Copy a cached compile_commands.json rewriting @REPO@ -> this worktree root.
+
+    Inverse of cc_to_placeholder: the token is substituted with the importing
+    worktree's absolute path so clangd resolves files in the RIGHT worktree.
+    Returns entry count.
+    """
+    entries = json.loads(cached_path.read_text())
+    root = str(dst_root)
+    for e in entries:
+        d = e.get("directory", "")
+        if d == REPO_PLACEHOLDER:
+            e["directory"] = root
+        elif d.startswith(REPO_PLACEHOLDER + "/"):
+            e["directory"] = root + d[len(REPO_PLACEHOLDER):]
+    out_path.write_text(json.dumps(entries, indent=2))
+    return len(entries)
 
 
 # ---- target paths ----------------------------------------------------------
@@ -241,16 +545,12 @@ def resolve_targets(repo: Path, args) -> list:
     platforms = [p for p in args.platforms.split(",") if p]
     building = "build" in getattr(args, "_stages", []) if hasattr(args, "_stages") else False
 
-    roles = None
+    rpm_list = None
     if args.rpms:
-        roles = []
         rpm_list = [r.strip() for r in args.rpms.split(",") if r.strip()]
         for rpm in rpm_list:
             if rpm not in RPM_ROLES:
                 die(f"unknown rpm '{rpm}' (valid: {', '.join(RPM_ROLES)})")
-            for r in RPM_ROLES[rpm]:
-                if r not in roles:
-                    roles.append(r)
         # Reject platform/rpm combos the build system does not support, up front.
         for plat in platforms:
             for rpm in rpm_list:
@@ -265,7 +565,19 @@ def resolve_targets(repo: Path, args) -> list:
 
     targets = []
     for plat in platforms:
-        wanted = roles if roles is not None else ALL_ROLES
+        # Roles are per-platform: idpfs roles vary (5500 is dp-only, 7500 is
+        # cp+dp), so derive them from idpfs_roles(plat) rather than the flat
+        # RPM_ROLES["idpfs"], otherwise collect/index resolve a phantom role
+        # (e.g. 5500-cp) that has no fragments and fail after a good build.
+        if rpm_list is not None:
+            wanted = []
+            for rpm in rpm_list:
+                rr = idpfs_roles(plat) if rpm == "idpfs" else RPM_ROLES[rpm]
+                for r in rr:
+                    if r not in wanted:
+                        wanted.append(r)
+        else:
+            wanted = ALL_ROLES
         found_any = False
         for r in wanted:
             toks = discover_tokens(repo, plat, r)
@@ -274,14 +586,14 @@ def resolve_targets(repo: Path, args) -> list:
                 for tok in toks:
                     if tok not in targets:
                         targets.append(tok)
-            elif roles is not None and building:
+            elif rpm_list is not None and building:
                 # Not built yet, but the user asked to build this role: keep the
                 # plain token as a placeholder (build runs per plat+rpm in phase 1;
                 # collect/index re-resolve to the emitted variants afterwards).
                 tok = f"{plat}-{r}"
                 if tok not in targets:
                     targets.append(tok)
-        if roles is None and not found_any:
+        if rpm_list is None and not found_any:
             die(f"no build fragments found for platform '{plat}'; "
                 f"specify --rpms to build (e.g. --rpms idpfs) and --do build")
     return targets
@@ -289,15 +601,83 @@ def resolve_targets(repo: Path, args) -> list:
 
 # ---- stages ----------------------------------------------------------------
 
-def run_build(repo: Path, plat: str, rpm: str):
+def run_build_no_rpm(repo: Path, plat: str, rpm: str, cleanup: bool = False):
+    """Compile-only build: run `make -C src PAN_BUILD_TARGETS=...` directly,
+    skipping rpmbuild packaging (the documented "no RPM" path).
+
+    This still produces every .compile_db fragment (they are emitted per TU at
+    compile time) and links the libraries, but avoids the RPM %install DESTDIR
+    copy + rpmbuild -bb assembly/compression tail. The top-level src make
+    self-dockerizes (docker.mk `all:` re-enters the kettle container), so we do
+    not manage docker here. cleanup=True adds CLOBBER=1 to wipe stale artifacts.
+    A make failure raises StageError so the caller can skip this target instead
+    of aborting the whole run. If the tree reports "There are no BUILD TARGETS
+    defined" (the target/role does not exist on THIS branch, e.g. panos.base-cp
+    for a dp-only platform), that is treated as a skip, not a build failure."""
+    if rpm == "idpfs":
+        targets = idpfs_targets(plat)
+    else:
+        tmpls = BUILD_TARGETS.get(rpm)
+        if not tmpls:
+            die(f"[build] --no-rpm: no PAN_BUILD_TARGETS mapping for rpm '{rpm}'")
+        targets = [t.format(p=plat) for t in tmpls]
+    src = repo / "src"
+    # bldtarget.mk prints this exact string and exits non-zero when a requested
+    # PAN_BUILD_TARGETS expands to nothing (bogus platform/role for this branch).
+    NO_TARGETS = "There are no BUILD TARGETS defined"
+    for bt in targets:
+        # NON_INTERACTIVE=1 makes docker.mk use 'docker run -t' instead of '-it';
+        # run_streamed feeds the child stdin=DEVNULL (no TTY), and docker refuses
+        # '-it' without a terminal ("cannot attach stdin to a TTY-enabled
+        # container"). Without this the self-docker step fails immediately.
+        make_base = ["make", "-C", str(src), f"PAN_BUILD_DIR={repo}",
+                     "NON_INTERACTIVE=1", f"PAN_BUILD_TARGETS={bt}"]
+        if cleanup:
+            # Run clobber as its OWN pass, not `CLOBBER=1 make all`. Appending
+            # CLOBBER=1 to the compile does not remove stale .bld/<target>
+            # objects left by a previous, different-version build, which then
+            # produce duplicate-symbol link errors (e.g. pan_aho/pan_tom defined
+            # in both ds and ds_ctd) when the aggregate .so is linked. A dedicated
+            # `clobber` goal wipes them first. A missing/invalid target here just
+            # no-ops; the real compile below reports NO_TARGETS if the target is
+            # bogus for this branch.
+            run_streamed(make_base + ["clobber"],
+                         prefix=f"clobber:{plat}-{rpm}:{bt}")
+        rc = run_streamed(make_base, prefix=f"build:{plat}-{rpm}:{bt}",
+                          watch=[NO_TARGETS])
+        if rc != 0:
+            if NO_TARGETS in run_streamed.last_seen:
+                raise StageError(
+                    f"[build] {bt} is not a valid target on this branch "
+                    f"(platform={plat} rpm={rpm}); skipping", skip=True)
+            raise StageError(
+                f"[build] compile-only make failed for {bt} "
+                f"(platform={plat} rpm={rpm})")
+    info(f"[build] platform={plat} rpm={rpm} done (compile-only, no rpm)")
+
+
+def run_build(repo: Path, plat: str, rpm: str, cleanup: bool = False, no_rpm: bool = False):
     """Invoke build-rpms once for a platform+RPM. One RPM emits every role (and
     every HW sub-variant) it contains, so building is keyed by (plat, rpm), not
-    by target token. A build failure is fatal (nothing downstream can proceed)."""
+    by target token. A build failure is fatal (nothing downstream can proceed).
+
+    cleanup=True forwards --cleanup (CLOBBER=1) so build_rpms wipes stale .bld
+    artifacts INSIDE the build container before compiling. This is the correct
+    way to clean between versions: a bare host 'make clobber' fails (no
+    PAN_BUILD_TARGETS / cannot write .buildnum), and leftover artifacts from a
+    different version cause bogus link/compile errors when indexing.
+
+    no_rpm=True switches to the compile-only path (make -C src ...), skipping
+    rpmbuild packaging entirely."""
+    if no_rpm:
+        return run_build_no_rpm(repo, plat, rpm, cleanup=cleanup)
     build_cmd = [
         "python3",
         str(repo / ".agents/skills/build-rpms/build_rpms.py"),
         "--platform", plat, "--rpm", rpm,
     ]
+    if cleanup:
+        build_cmd.append("--cleanup")
     rc = run_streamed(build_cmd, prefix=f"build:{plat}-{rpm}")
     if rc != 0:
         die(f"[build] build-rpms failed for platform={plat} rpm={rpm}")
@@ -337,11 +717,39 @@ def stage_collect(repo: Path, tgt: Target, args):
     info(f"[collect] wrote {len(seen)} entries -> {tgt.ccjson}")
 
 
+def prune_missing_dirs(tgt: Target):
+    """Drop compile_commands.json entries whose 'directory' is absent on disk.
+
+    clangd-indexer chdir()s into each entry's 'directory' and ABORTS the whole
+    run (LLVM ERROR: Cannot chdir) on the first one that does not exist. When a
+    cached compile_commands.json is imported into a worktree whose source tree
+    differs (files/dirs added or removed since the cache was built), such stale
+    entries must be removed or no index is produced at all. Rewrites the file in
+    place (the same file the indexer auto-loads from its CWD)."""
+    entries = json.loads(tgt.ccjson.read_text())
+    keep = [e for e in entries if os.path.isdir(e.get("directory", ""))]
+    dropped = len(entries) - len(keep)
+    if dropped:
+        tgt.ccjson.write_text(json.dumps(keep, indent=2))
+        info(f"[index] pruned {dropped} entries with missing directories "
+             f"(source drift); {len(keep)} remain")
+    return len(keep)
+
+
 def stage_index(repo: Path, tgt: Target, args):
-    """Run clangd-indexer-16 in-container: compile_commands.json -> panos.idx."""
+    """Index compile_commands.json -> panos.idx on the HOST (not in a container).
+
+    The host clangd-indexer-16 (clang-16 / GLIBC 2.35) is used directly so we do
+    not depend on the worktree's kettle image, which may be too old (clang-10 /
+    GLIBC<2.34) to run it. The only thing not on the host is the clang-16 builtin
+    include dir, supplied via ensure_clang_include()."""
     if not tgt.ccjson.exists():
         stage_die(f"[index] {tgt.ccjson} missing; run the 'collect' stage first")
     tgt.dir.mkdir(parents=True, exist_ok=True)
+    # Drop entries pointing at directories that do not exist here, else the
+    # indexer aborts the entire run on the first chdir failure.
+    if prune_missing_dirs(tgt) == 0:
+        stage_die(f"[index] no entries with existing directories for {tgt.name}")
     # Clear this target's background cache before re-indexing. clangd's
     # --background-index writes shards under $TDIR/cache/clangd/index/ (see
     # docker-clangd). A rebuilt panos.idx does NOT invalidate those shards, so
@@ -354,11 +762,12 @@ def stage_index(repo: Path, tgt: Target, args):
         shutil.rmtree(tgt.cache, ignore_errors=True)
         info(f"[index] cleared stale background cache {tgt.cache}")
     tgt.cache.mkdir(parents=True, exist_ok=True)
-    # clangd-indexer drives clang semantics even for gcc/cc compile commands, so
-    # it must be told where the clang-16 builtin headers live (stddef.h, stdarg.h,
-    # etc.). Without this, every TU whose command is gcc/cc fails with
-    # "'stddef.h' file not found". The resource-include dir is fixed in the kettle
-    # image at /usr/lib64/clang/16/include (matches clangd-16 / clangd-indexer-16).
+    # Run the indexer INSIDE a container that has the clang-16 builtin headers AND
+    # the 3rd-party headers (Python.h, libxml/tree.h, ...) the compile commands
+    # reference. Running the host binary bare left dozens of TUs failing with
+    # "file not found". The host clangd-indexer-16 is bind-mounted in; the image
+    # is the worktree's own (if new enough) or a modern default (indexer_image()).
+    image = indexer_image(repo)
     inner = (
         f"{INDEXER} --executor=all-TUs "
         f"--extra-arg=-isystem --extra-arg=/usr/lib64/clang/16/include "
@@ -371,14 +780,44 @@ def stage_index(repo: Path, tgt: Target, args):
         "-w", str(tgt.dir),
         "-e", "HOME=/home/lexli",
         "-e", "PATH=/home/lexli/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        detect_image(repo),
-        "bash", "-c", inner,
+        image, "bash", "-c", inner,
     ]
     t0 = time.time()
-    r = run(cmd)
+    # idx is written to tgt.idx by the in-container redirect; progress
+    # ("[k/N] Processing file ...") and diagnostics come on stderr. Stream stderr,
+    # drop the benign "does not contain a GCC installation" noise, throttle the
+    # per-file progress, and surface any real errors.
+    info("+ " + " ".join(str(c) for c in cmd))
+    # Benign per-TU diagnostics to suppress: the redhat GCC-toolchain probe (host
+    # path absent, clang falls back fine) and per-TU driver skips on generated /
+    # edge-case files (SWIG .i.c, protobuf .pb-c.c). clangd-indexer skips the TU
+    # and continues; the index is still complete for the rest.
+    noise = re.compile(r"does not contain a GCC installation"
+                       r"|no input files"
+                       r"|error: unable to handle compilation"
+                       r"|Error while processing "
+                       r"|too many errors emitted")
+    processed = 0
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE, text=True, bufsize=1)
+    for raw in proc.stderr:
+        line = raw.rstrip()
+        if not line or noise.search(line):
+            continue
+        if "Processing file" in line:
+            processed += 1
+            # Throttle: print every 100th progress line + the first, so the
+            # log shows steady movement without 2000+ lines per target.
+            if processed == 1 or processed % 100 == 0:
+                print(f"  index:{tgt.name}| {line}", flush=True)
+            continue
+        print(f"  index:{tgt.name}| {line}", flush=True)
+    proc.wait()
+    r = proc
     if r.returncode != 0 or not tgt.idx.exists() or tgt.idx.stat().st_size == 0:
         stage_die(f"[index] indexer failed for {tgt.name}")
-    info(f"[index] built {tgt.idx} ({tgt.idx.stat().st_size} bytes) in {time.time()-t0:.0f}s")
+    info(f"[index] built {tgt.idx} ({tgt.idx.stat().st_size} bytes, "
+         f"{processed} TUs) in {fmt_dur(time.time()-t0)}")
 
 
 def write_meta(repo: Path, tgt: Target):
@@ -422,16 +861,16 @@ def cmd_list(repo: Path):
     if not targets_dir.exists():
         print("no targets built yet (run: lsp-panos --platforms <plat> --rpms <rpm>)")
         if not active:
-            print("active: NONE (clangd will use fallback flags)")
+            print("No active target")
         return
     for d in sorted(targets_dir.iterdir()):
         if not d.is_dir():
             continue
-        mark = " *ACTIVE*" if d.name == active else ""
         has_idx = (d / "panos.idx").exists()
-        print(f"  {d.name}{mark}  index={'yes' if has_idx else 'NO'}")
+        mark = " (*)" if d.name == active else ""
+        print(f"  {d.name}  index={'yes' if has_idx else 'NO'}{mark}")
     if not active:
-        print("active: NONE (clangd will use fallback flags — run lsp-panos --use <target>)")
+        print("No active target")
     elif not (targets_dir / active).exists():
         print(f"active: {active} (WARNING: target dir missing)")
 
@@ -456,6 +895,149 @@ def cmd_clean(repo: Path, name: str):
         info(f"nothing to clean: {d} does not exist")
 
 
+# ---- cache store commands --------------------------------------------------
+
+def roles_for_rpm(rpm: str) -> list:
+    """Roles produced by an RPM type, validated (reuses the RPM_ROLES map)."""
+    if rpm not in RPM_ROLES:
+        die(f"unknown rpm '{rpm}' (valid: {', '.join(RPM_ROLES)})")
+    return RPM_ROLES[rpm]
+
+
+def cmd_list_cache():
+    """List the cache store grouped by version-key -> platform -> target."""
+    if not CACHE_ROOT.exists() or not any(CACHE_ROOT.iterdir()):
+        print(f"cache empty: {CACHE_ROOT}")
+        return
+    print(f"cache root: {CACHE_ROOT}")
+    for vk in sorted(p for p in CACHE_ROOT.iterdir() if p.is_dir()):
+        print(f"  {vk.name}/")
+        for plat in sorted(p for p in vk.iterdir() if p.is_dir()):
+            print(f"    {plat.name}/")
+            for tgt in sorted(p for p in plat.iterdir() if p.is_dir()):
+                m = tgt / "meta.json"
+                info_str = ""
+                if m.exists():
+                    try:
+                        d = json.loads(m.read_text())
+                        info_str = (f"  entries={d.get('entries', '?')}"
+                                    f" head={d.get('git_head', '?')}"
+                                    f" saved={fmt_local(d.get('saved_at', '?'))}")
+                    except Exception:
+                        pass
+                has_cc = (tgt / "compile_commands.json").exists()
+                print(f"      {tgt.name}  cc={'yes' if has_cc else 'NO'}{info_str}")
+
+
+def cmd_save_cache(repo: Path, override_key: str = None):
+    """Save this worktree's built compile_commands.json into the shared store.
+
+    For every target already collected under .lsp/targets/, write a placeholder-
+    normalized copy under <CACHE_ROOT>/<version-key>/<platform>/<target>/.
+    Only compile_commands.json is cached (panos.idx is re-indexed on import).
+    """
+    vk = version_key(repo, override_key)
+    targets_dir = repo / ".lsp" / "targets"
+    if not targets_dir.exists() or not any(targets_dir.iterdir()):
+        die("no built targets under .lsp/targets/ to save "
+            "(run a collect/index first, e.g. lsp-panos --platforms 5500 --rpms idpfs)")
+    try:
+        head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
+            text=True).strip()
+    except Exception:
+        head = "unknown"
+    saved = 0
+    for d in sorted(targets_dir.iterdir()):
+        if not d.is_dir():
+            continue
+        cc = d / "compile_commands.json"
+        if not cc.exists():
+            info(f"[save-cache] skip {d.name}: no compile_commands.json")
+            continue
+        tgt = Target(repo, d.name)
+        dest = CACHE_ROOT / vk / tgt.plat / tgt.name
+        dest.mkdir(parents=True, exist_ok=True)
+        n = cc_to_placeholder(cc, repo, dest / "compile_commands.json")
+        (dest / "meta.json").write_text(json.dumps({
+            "target": tgt.name,
+            "platform": tgt.plat,
+            "version_key": vk,
+            "entries": n,
+            "git_head": head,
+            "kettle_image": detect_image(repo),
+            "src_root": str(repo),
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        }, indent=2))
+        info(f"[save-cache] {tgt.name} -> {dest}/compile_commands.json ({n} entries)")
+        saved += 1
+    info(f"[save-cache] saved {saved} target(s) under {CACHE_ROOT / vk}")
+
+
+def cmd_use_cache(repo: Path, platform: str, rpm: str = None, override_key: str = None):
+    """Import cached compile_commands.json for a platform, then index locally.
+
+    version-key is auto-detected from this worktree's branch (or --from). Roles
+    come from --rpms if given, else every role cached for the platform. Each
+    imported cc is path-rewritten (@REPO@ -> this worktree) and indexed right
+    after so clangd is usable immediately.
+    """
+    vk = version_key(repo, override_key)
+    src = CACHE_ROOT / vk / platform
+    if not src.exists():
+        avail = []
+        if CACHE_ROOT.exists():
+            for k in sorted(p for p in CACHE_ROOT.iterdir() if p.is_dir()):
+                plats = sorted(p.name for p in k.iterdir() if p.is_dir())
+                avail.append(f"    {k.name}: {', '.join(plats) or '(none)'}")
+        die(f"no cache for version-key '{vk}' platform '{platform}' at {src}\n"
+            f"  available (version-key: platforms):\n" + ("\n".join(avail) or "    (cache empty)")
+            + f"\n  override the version-key with --from <key>")
+
+    want_roles = roles_for_rpm(rpm) if rpm else None
+    imported = []
+    for tdir in sorted(p for p in src.iterdir() if p.is_dir()):
+        _, role = parse_target(tdir.name)
+        if want_roles is not None and role not in want_roles:
+            continue
+        cached_cc = tdir / "compile_commands.json"
+        if not cached_cc.exists():
+            info(f"[use-cache] skip {tdir.name}: no cached compile_commands.json")
+            continue
+        tgt = Target(repo, tdir.name)
+        tgt.dir.mkdir(parents=True, exist_ok=True)
+        n = cc_from_placeholder(cached_cc, repo, tgt.ccjson)
+        info(f"[use-cache] imported {tgt.name} ({n} entries) -> {tgt.ccjson}")
+        imported.append(tgt)
+
+    if not imported:
+        die(f"nothing imported for platform '{platform}'"
+            + (f" rpm '{rpm}'" if rpm else "")
+            + f" under version-key '{vk}'")
+
+    # Index right after import so clangd has a static index immediately.
+    failed = []
+    _t0 = time.time()
+    _n = len(imported)
+    for _i, tgt in enumerate(imported):
+        progress(_i, _n, _t0, "index (from cache)")
+        info(f"=== index {tgt.name} (from cache) [{_i+1}/{_n}] ===")
+        try:
+            stage_index(repo, tgt, None)
+            write_meta(repo, tgt)
+        except StageError as e:
+            info(f"[skip] {tgt.name}: {e}")
+            failed.append((tgt.name, str(e)))
+    progress(_n, _n, _t0, "index (from cache)")
+    ok = [t.name for t in imported if t.name not in {n for n, _ in failed}]
+    info(f"[use-cache] indexed {len(ok)}/{len(imported)} (ok: {', '.join(ok) or '-'})")
+    if failed:
+        for n, e in failed:
+            info(f"  FAILED {n}: {e}")
+        sys.exit(1)
+    info("done. Activate one with: lsp-panos --use <target>")
+
+
 def main():
     def fmt(prog):
         # Wide help column so each option's description stays on one line.
@@ -477,6 +1059,37 @@ def main():
                     help="list ready targets and the active one")
     ap.add_argument("--clean", metavar="<target|all>",
                     help="remove cached artifacts for target, or 'all'")
+    # Shared cache store (only compile_commands.json is cached).
+    ap.add_argument("--list-cache", dest="list_cache", action="store_true",
+                    help=f"list the shared cache store ({CACHE_ROOT})")
+    ap.add_argument("--use-cache", dest="use_cache", nargs="+",
+                    metavar="<platform>",
+                    help="import cached compile_commands.json for ONE platform, then index; "
+                         "optional rpm filter: --use-cache <platform> [mpfs|dpfs|idpfs]")
+    ap.add_argument("--save-cache", dest="save_cache", action="store_true",
+                    help="save built compile_commands.json to the shared cache store")
+    ap.add_argument("--from", dest="from_key", metavar="<version-key>",
+                    help="which cached version to import FROM (default: most recent git tag,\n"
+                         "i.e. 'git describe --tags --abbrev=0', e.g. 13.1.0-c866.main_rel).\n"
+                         "use when your tag has no cache but a close one exists, e.g.:\n"
+                         "  lsp-panos --use-cache 5500 idpfs --from 13.1.0-c866.main_rel\n"
+                         "reads panos-lsp/13.1.0-c866.main_rel/5500/{5500-cp,5500-dp}/compile_commands.json")
+    ap.add_argument("--as", dest="as_key", metavar="<version-key>",
+                    help="which cached version to save AS (default: most recent git tag,\n"
+                         "i.e. 'git describe --tags --abbrev=0', e.g. 13.1.0-c866.main_rel).\n"
+                         "use to stamp a specific key regardless of the local tag/branch, e.g.:\n"
+                         "  lsp-panos --save-cache --as 13.1.0-c866.main_rel\n"
+                         "writes panos-lsp/13.1.0-c866.main_rel/<platform>/<target>/compile_commands.json")
+    ap.add_argument("--no-rpm", dest="no_rpm", action="store_true",
+                    help="compile-only build: run 'make -C src PAN_BUILD_TARGETS=...' "
+                         "directly instead of building an RPM. Produces the same "
+                         ".compile_db fragments (all we need for LSP) but skips "
+                         "rpmbuild packaging. Self-dockerizes.")
+    ap.add_argument("--clobber", action="store_true",
+                    help="before building, wipe stale build artifacts via "
+                         "build_rpms.py --cleanup (CLOBBER=1, in-container). "
+                         "Use when reusing a worktree across versions to avoid "
+                         "bogus index errors from leftover .bld output.")
     ap.add_argument("--dry-run", action="store_true", help="")
 
     # No arguments at all -> print help and exit (don't fall through to the
@@ -492,6 +1105,8 @@ def main():
     # Simple sub-commands first.
     if args.list:
         return cmd_list(repo)
+    if args.list_cache:
+        return cmd_list_cache()
     if args.clean:
         return cmd_clean(repo, args.clean)
     if args.use:
@@ -500,6 +1115,18 @@ def main():
             die(f"--use {args.use}: target not built "
                 f"(run: lsp-panos --platforms {tgt.plat} --rpms <rpm>)")
         return activate(repo, tgt.name)
+    if args.use_cache:
+        vals = args.use_cache
+        if len(vals) > 2:
+            die("--use-cache supports only ONE platform: "
+                "--use-cache <platform> [mpfs|dpfs|idpfs]")
+        platform = vals[0]
+        rpm = vals[1] if len(vals) == 2 else None
+        return cmd_use_cache(repo, platform, rpm, override_key=args.from_key)
+
+    # --save-cache with no build stages requested = save already-built targets.
+    if args.save_cache and not (args.platforms or args.do):
+        return cmd_save_cache(repo, override_key=args.as_key)
 
     # Stage selection: default is all three (build, collect, index).
     # 'all' is an alias for every stage.
@@ -533,10 +1160,25 @@ def main():
         if args.dry_run:
             info(f"repo: {repo}")
             info(f"build plan (platform,rpm): {build_plan}")
+        # --clobber cleans stale artifacts, but only on the FIRST rpm of each
+        # platform: clobbering again for a later rpm of the same platform would
+        # wipe the .bld output the first rpm just produced.
+        clobbered = set()
         for plat, rpm in build_plan:
             if args.dry_run:
                 continue
-            run_build(repo, plat, rpm)
+            do_clean = args.clobber and plat not in clobbered
+            try:
+                run_build(repo, plat, rpm, cleanup=do_clean, no_rpm=args.no_rpm)
+            except StageError as e:
+                # A benign skip (target/role not on this branch) is logged and we
+                # move on; a real build failure is still fatal.
+                if getattr(e, "skip", False):
+                    info(f"[skip] build {plat}/{rpm}: {e}")
+                    clobbered.add(plat)
+                    continue
+                die(str(e))
+            clobbered.add(plat)
 
     # Phase 2: re-resolve to the REAL tokens on disk (build may have just emitted
     # HW sub-variants like 7500-cp-800g), then collect/index each independently.
@@ -554,9 +1196,12 @@ def main():
 
     stage_fns = {"collect": stage_collect, "index": stage_index}
     failed = []
-    for name in targets:
+    _t0 = time.time()
+    _n = len(targets)
+    for _i, name in enumerate(targets):
+        progress(_i, _n, _t0, "targets")
         tgt = Target(repo, name)
-        info(f"=== target {name} : stages {post} ===")
+        info(f"=== target {name} : stages {post} [{_i+1}/{_n}] ===")
         try:
             for st in post:
                 stage_fns[st](repo, tgt, args)
@@ -565,9 +1210,16 @@ def main():
             info(f"[skip] {name}: {e}")
             failed.append((name, str(e)))
 
+    progress(_n, _n, _t0, "targets")
     failed_names = {n for n, _ in failed}
     ok = [t for t in targets if t not in failed_names]
     info(f"summary: {len(ok)} ok, {len(failed)} failed (ok: {', '.join(ok) or '-'})")
+
+    # Piggyback: after a normal build/collect run, save the freshly built
+    # compile_commands.json into the shared cache store.
+    if args.save_cache and ok:
+        cmd_save_cache(repo, override_key=args.as_key)
+
     if failed:
         for n, e in failed:
             info(f"  FAILED {n}: {e}")
