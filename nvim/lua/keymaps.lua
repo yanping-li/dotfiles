@@ -25,6 +25,17 @@ map("n", "<Leader>fg", "<cmd>Telescope live_grep<CR>")
 map("n", "<Leader>fb", "<cmd>Telescope buffers<CR>")
 map("n", "<Leader>fh", "<cmd>Telescope help_tags<CR>")
 map("n", "<Leader>fs", "<cmd>Telescope lsp_dynamic_workspace_symbols<CR>")
+-- Exact workspace symbol search: lsp_dynamic_workspace_symbols re-queries clangd on
+-- every keystroke, so fzf-native's exact/prefix/suffix operators never get a static
+-- list to filter. Seed lsp_workspace_symbols with a real query up front (its default
+-- "" query returns nothing from clangd) so it becomes a static picker fzf can filter.
+map("n", "<Leader>fS", function()
+    vim.ui.input({ prompt = "Symbol: " }, function(query)
+        if query and query ~= "" then
+            require("telescope.builtin").lsp_workspace_symbols({ query = query })
+        end
+    end)
+end)
 
 -- Clear search highlight
 map("n", "<Leader>h", "<cmd>nohlsearch<CR>")
