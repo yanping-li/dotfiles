@@ -98,6 +98,13 @@ local plugins = {
         end,
     },
 
+    -- Markdown inline rendering
+    {
+        "MeanderingProgrammer/render-markdown.nvim",
+        ft = "markdown",
+        opts = {},
+    },
+
     -- Unix helpers (:Rename, :Delete, :Move, etc.)
     { "tpope/vim-eunuch" },
 
