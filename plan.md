@@ -76,6 +76,16 @@ fi
 
 ---
 
+## 6. Machine-specific SSH config ✓
+
+Generate `~/.ssh/config` in bootstrap.sh by concatenating base + machine-specific file, similar to `.gitconfig`.
+
+- Moved `User` directive out of the shared `.ssh/config`
+- Added `.ssh/config.personal` (`User yanpingli`), `.ssh/config.work`, `.ssh/config.devserver` (`User lexli`)
+- `bootstrap.sh`: `cat .ssh/config ".ssh/config.$MACHINE_TYPE" > ~/.ssh/config`
+
+---
+
 ## To be added
 
 - Zsh support (`.zshrc`, `.shell_common` currently untracked)

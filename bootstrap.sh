@@ -47,14 +47,6 @@ function generateCronjobs() {
     echo "Done."
 }
 
-function generateSshConfig() {
-    echo "Generating ~/.ssh/config ..."
-    mkdir -p ~/.ssh
-    cat .ssh/config ".ssh/config.$MACHINE_TYPE" > ~/.ssh/config
-    chmod 600 ~/.ssh/config
-    echo "Done."
-}
-
 function installNvimBinary() {
     if command -v nvim &>/dev/null; then
         local ver
@@ -257,8 +249,6 @@ function doIt() {
         --exclude ".gitconfig-personal" \
         --exclude ".gitconfig-work" \
         --exclude ".cronjobs.*" \
-        --exclude ".ssh/config" \
-        --exclude ".ssh/config.*" \
         -avh --no-perms . ~;
 
     if [ "$MACHINE_TYPE" = "devserver" ]; then
@@ -271,7 +261,6 @@ function doIt() {
     # Write machine type before sourcing shell config
     echo "export MACHINE_TYPE=$MACHINE_TYPE" > ~/.machine_type;
     generateGitconfig;
-    generateSshConfig;
     generateCronjobs;
     source ~/.bash_profile;
 
@@ -298,5 +287,4 @@ unset installNvimBinary;
 unset installCliTools;
 unset setupTmuxPlugins;
 unset generateGitconfig;
-unset generateSshConfig;
 unset generateCronjobs;
