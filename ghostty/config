@@ -4,10 +4,10 @@ font-size = 16
 font-thicken = false
 
 # Colors (from mac-terminal-profile.terminal, Display P3 converted to sRGB)
-background = #626668
+background = #1F2223
 foreground = #F2F2F2
-cursor-color = #FFC573
-selection-background = #B8B2CF
+cursor-color = #FF9337
+selection-background = #79719B
 bold-color = #FFFFFF
 
 # Background opacity (0.85 from terminal profile)
@@ -23,3 +23,6 @@ window-height = 35
 
 # Keyboard
 macos-option-as-alt = true
+
+# Use xterm-256color so remote servers without ghostty terminfo work
+term = xterm-256color
