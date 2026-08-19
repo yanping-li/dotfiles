@@ -1,0 +1,25 @@
+# Font
+font-family = Monaco
+font-size = 16
+font-thicken = false
+
+# Colors (from mac-terminal-profile.terminal, Display P3 converted to sRGB)
+background = #626668
+foreground = #F2F2F2
+cursor-color = #FFC573
+selection-background = #B8B2CF
+bold-color = #FFFFFF
+
+# Background opacity (0.85 from terminal profile)
+background-opacity = 0.85
+
+# Cursor
+cursor-style = block
+cursor-style-blink = true
+
+# Window
+window-width = 120
+window-height = 35
+
+# Keyboard
+macos-option-as-alt = true

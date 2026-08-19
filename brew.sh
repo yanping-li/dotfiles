@@ -49,5 +49,8 @@ brew install pv          # monitor pipe progress
 brew install ack         # code search
 brew install jq          # JSON processor
 
+# Terminal emulator
+brew install --cask ghostty
+
 # Remove outdated versions from the cellar.
 brew cleanup

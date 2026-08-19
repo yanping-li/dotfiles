@@ -47,6 +47,14 @@ function generateCronjobs() {
     echo "Done."
 }
 
+function generateSshConfig() {
+    echo "Generating ~/.ssh/config ..."
+    mkdir -p ~/.ssh
+    cat .ssh/config ".ssh/config.$MACHINE_TYPE" > ~/.ssh/config
+    chmod 600 ~/.ssh/config
+    echo "Done."
+}
+
 function installNvimBinary() {
     if command -v nvim &>/dev/null; then
         local ver
@@ -201,6 +209,14 @@ function installCliTools() {
 }
 
 
+function deployGhostty() {
+    echo "Deploying ghostty config to ~/.config/ghostty ..."
+    mkdir -p ~/.config/ghostty
+    rsync --exclude ".DS_Store" \
+        -avh --no-perms ghostty/ ~/.config/ghostty/
+    echo "Done."
+}
+
 function deployNvim() {
     echo "Deploying nvim config to ~/.config/nvim ..."
     mkdir -p ~/.config/nvim
@@ -236,10 +252,13 @@ function doIt() {
         --exclude "brew.sh" \
         --exclude ".claude/" \
         --exclude "nvim/" \
+        --exclude "ghostty/" \
         --exclude ".gitconfig" \
         --exclude ".gitconfig-personal" \
         --exclude ".gitconfig-work" \
         --exclude ".cronjobs.*" \
+        --exclude ".ssh/config" \
+        --exclude ".ssh/config.*" \
         -avh --no-perms . ~;
 
     if [ "$MACHINE_TYPE" = "devserver" ]; then
@@ -247,10 +266,12 @@ function doIt() {
         installCliTools;
     fi
     deployNvim;
+    deployGhostty;
 
     # Write machine type before sourcing shell config
     echo "export MACHINE_TYPE=$MACHINE_TYPE" > ~/.machine_type;
     generateGitconfig;
+    generateSshConfig;
     generateCronjobs;
     source ~/.bash_profile;
 
@@ -272,8 +293,10 @@ fi;
 
 unset doIt;
 unset deployNvim;
+unset deployGhostty;
 unset installNvimBinary;
 unset installCliTools;
 unset setupTmuxPlugins;
 unset generateGitconfig;
+unset generateSshConfig;
 unset generateCronjobs;
