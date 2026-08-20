@@ -76,7 +76,40 @@ else
   CACHE_HOME="/home/lexli"
 fi
 
-exec docker run --rm -i \
+# Named so we can force-stop THIS container on any exit path. nvim's graceful
+# LSP shutdown (shutdown+exit over stdio) can race its own process exit — in
+# testing, nvim's process fully exited while the container was still up
+# minutes later, so the exit-notification handshake alone is NOT reliable.
+# ssh/tmux drops deliver SIGHUP rather than any handshake at all. Either way
+# the container can outlive nvim indefinitely, still burning CPU on
+# --background-index (see the clangd-survives-nvim-exit investigation in
+# dotfiles-ai/.plans/nvim/TODO.md). Not exec'd, so this script keeps its own
+# PID (instead of being replaced by docker's) and can trap signals/exit to
+# clean up regardless of how it's told to stop.
+CONTAINER_NAME="docker-clangd-$$"
+PARENT_PID="$PPID"  # nvim's pid: it execs this script directly as the LSP job
+
+cleanup() {
+  docker stop -t 2 "$CONTAINER_NAME" >/dev/null 2>&1 || true
+  [ -n "${WATCHER_PID:-}" ] && kill "$WATCHER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM HUP
+
+# Orphan watchdog: don't rely on nvim telling us to stop at all (the graceful
+# handshake races nvim's own exit, per above). Instead poll whether our
+# original parent (nvim) is still alive, and force-stop the container the
+# moment it isn't — this covers every exit path uniformly, including nvim
+# crashing or vanishing without any notification or signal reaching us.
+(
+  while kill -0 "$PARENT_PID" 2>/dev/null; do
+    sleep 2
+  done
+  docker stop -t 2 "$CONTAINER_NAME" >/dev/null 2>&1
+) &
+WATCHER_PID=$!
+
+docker run --rm -i \
+  --name "$CONTAINER_NAME" \
   --user "$(id -u):$(id -g)" \
   -v /home/lexli:/home/lexli \
   -w "$REPO/src" \
@@ -86,4 +119,10 @@ exec docker run --rm -i \
   "$KETTLE_IMAGE" \
   /home/lexli/.local/bin/clangd-16 \
     "${CLANGD_ARGS[@]}" \
-    "$@"
+    "$@" <&0 &
+# <&0 above is required: with job control off (the default for a non-interactive
+# script), bash silently redirects a backgrounded command's stdin from /dev/null
+# UNLESS the command itself specifies a stdin redirection — without it clangd
+# sees an immediately-broken stdin ("Transport error: Input/output error").
+DOCKER_PID=$!
+wait "$DOCKER_PID"
