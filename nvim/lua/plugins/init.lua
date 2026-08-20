@@ -114,6 +114,8 @@ local plugins = {
     -- Trailing whitespace removal
     { "ntpeters/vim-better-whitespace", config = function()
         vim.g.better_whitespace_enabled = 1
+        vim.g.better_whitespace_ctermcolor = '238'
+        vim.g.better_whitespace_guicolor = '#3a3a3a'
         vim.g.strip_whitespace_on_save = 1
         vim.g.strip_whitespace_confirm = 0
     end },
