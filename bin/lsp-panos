@@ -434,21 +434,55 @@ def version_key(repo: Path, override: str = None) -> str:
     return normalize_key(branch)
 
 
+# Match the root prefix ONLY at a path boundary: exactly 'old', or 'old' followed
+# by '/'. This avoids clobbering a sibling path that merely shares the prefix as a
+# substring (e.g. root '/home/lexli/pan/main' must NOT touch '/home/lexli/pan/mainsrc').
+def _boundary_sub(s: str, old: str, new: str) -> str:
+    if old not in s:
+        return s
+    return re.sub(re.escape(old) + r"(?=/|$)", new.replace("\\", "\\\\"), s)
+
+
+def _rewrite_entry_paths(e: dict, old: str, new: str) -> None:
+    """Replace the worktree-root prefix 'old' with 'new' everywhere in an entry.
+
+    The root can appear in 'directory' AND embedded in absolute compiler args
+    ('-I/root/src/...', '-isystem /root/...', '-o /root/...', '--sysroot=/root/...',
+    or a standalone token after a separate '-I'). Rewriting only 'directory' leaves
+    those absolute args pointing at the ORIGINAL worktree, so clangd resolves
+    headers against a foreign tree (missing/mismatched -> 'unknown type name').
+
+    The prefix is matched at a path boundary (old, or old + '/') so a sibling
+    worktree that shares the prefix as a plain substring (e.g. '<root>src') is
+    NOT corrupted. Applies to directory, file, command and every arguments[] token.
+    """
+    d = e.get("directory")
+    if isinstance(d, str):
+        e["directory"] = _boundary_sub(d, old, new)
+    f = e.get("file")
+    if isinstance(f, str):
+        e["file"] = _boundary_sub(f, old, new)
+    c = e.get("command")
+    if isinstance(c, str):
+        e["command"] = _boundary_sub(c, old, new)
+    args = e.get("arguments")
+    if isinstance(args, list):
+        e["arguments"] = [_boundary_sub(a, old, new) if isinstance(a, str) else a
+                          for a in args]
+
+
 def cc_to_placeholder(ccjson_path: Path, src_root: Path, out_path: Path) -> int:
     """Copy compile_commands.json rewriting absolute worktree paths -> @REPO@.
 
-    'directory' is absolute and rooted at the source worktree; 'file' and the
-    '-o' output are relative to it, so replacing the worktree-root prefix with
-    the placeholder makes the file relocatable. Returns entry count.
+    The worktree root appears in 'directory' AND in absolute compiler args
+    (-I/-isystem/-o/--sysroot=...). Every occurrence of the source worktree root
+    is replaced with the placeholder so the cached file is fully relocatable.
+    Returns entry count.
     """
     entries = json.loads(ccjson_path.read_text())
     root = str(src_root)
     for e in entries:
-        d = e.get("directory", "")
-        if d == root:
-            e["directory"] = REPO_PLACEHOLDER
-        elif d.startswith(root + "/"):
-            e["directory"] = REPO_PLACEHOLDER + d[len(root):]
+        _rewrite_entry_paths(e, root, REPO_PLACEHOLDER)
     out_path.write_text(json.dumps(entries, indent=2))
     return len(entries)
 
@@ -456,18 +490,15 @@ def cc_to_placeholder(ccjson_path: Path, src_root: Path, out_path: Path) -> int:
 def cc_from_placeholder(cached_path: Path, dst_root: Path, out_path: Path) -> int:
     """Copy a cached compile_commands.json rewriting @REPO@ -> this worktree root.
 
-    Inverse of cc_to_placeholder: the token is substituted with the importing
-    worktree's absolute path so clangd resolves files in the RIGHT worktree.
-    Returns entry count.
+    Inverse of cc_to_placeholder: EVERY @REPO@ occurrence (directory, file,
+    command, and all arguments[] tokens) is substituted with the importing
+    worktree's absolute path so clangd resolves files/headers in the RIGHT
+    worktree. Returns entry count.
     """
     entries = json.loads(cached_path.read_text())
     root = str(dst_root)
     for e in entries:
-        d = e.get("directory", "")
-        if d == REPO_PLACEHOLDER:
-            e["directory"] = root
-        elif d.startswith(REPO_PLACEHOLDER + "/"):
-            e["directory"] = root + d[len(REPO_PLACEHOLDER):]
+        _rewrite_entry_paths(e, REPO_PLACEHOLDER, root)
     out_path.write_text(json.dumps(entries, indent=2))
     return len(entries)
 
