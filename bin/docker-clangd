@@ -59,8 +59,25 @@ ACTIVE_FILE="$REPO/.lsp/active"
 TARGET=""
 [ -f "$ACTIVE_FILE" ] && TARGET="$(tr -d '[:space:]' < "$ACTIVE_FILE")"
 
+# --- resource-dir: point clangd at ITS OWN container's builtin headers --------
+# clangd-16 here is the HOST binary (/home/lexli/.local/bin/clangd-16), bind-mounted
+# into the container and run from that host path. Clang normally auto-detects its
+# resource dir (stddef.h, stdarg.h, etc.) relative to its OWN binary's install
+# location — which fails here, since the host path has no relationship to the
+# container's real /usr/lib64/clang/16 tree. Symptom when this is missing: system
+# headers like <string.h> fail mid-include ("'stddef.h' file not found"), which
+# then cascades (e.g. NULL becomes "undeclared identifier") and silently breaks
+# gd/hover for everything after that point in the file — while the SAME symbol
+# still resolves fine via workspace-symbol search (name lookup, not tied to this
+# file's own broken AST). lsp-panos's OFFLINE indexer already works around this
+# exact issue (see stage_index()'s --extra-arg=-isystem); this wrapper never had
+# the same fix. Detected per-image (not hardcoded) since different branches use
+# different kettle images with potentially different clang installs.
+RESOURCE_DIR="$(docker run --rm "$KETTLE_IMAGE" clang-16 -print-resource-dir 2>/dev/null || true)"
+
 # --- derive clangd flags from the active target (or fall back) ----------------
 CLANGD_ARGS=(--background-index)
+[ -n "$RESOURCE_DIR" ] && CLANGD_ARGS+=("--resource-dir=$RESOURCE_DIR")
 
 if [ -n "$TARGET" ] && [ -d "$REPO/.lsp/targets/$TARGET" ]; then
   TDIR="$REPO/.lsp/targets/$TARGET"
