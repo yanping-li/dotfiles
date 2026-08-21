@@ -142,6 +142,9 @@ local plugins = {
     -- Unix helpers (:Rename, :Delete, :Move, etc.)
     { "tpope/vim-eunuch" },
 
+    -- Git: blame, log/revision browsing, diff against any commit
+    { "tpope/vim-fugitive" },
+
     -- Indent text object (ai / ii)
     { "michaeljsmith/vim-indent-object" },
 
