@@ -105,6 +105,40 @@ local plugins = {
         opts = {},
     },
 
+    -- cscope: raw-text symbol search. Complements clangd -- finds things the
+    -- AST-based LSP structurally can't, e.g. a bare identifier that only ever
+    -- appears as a token-pasting macro argument (PAN_COUNTER_INC(foo) --
+    -- clangd only ever sees the EXPANDED PAN_COUNTER_foo after preprocessing;
+    -- cscope sees the literal source text). Neovim dropped native :cscope/:cs
+    -- support (unlike Vim), hence the plugin. Database: generate with
+    -- `cscope-prepare` (~/bin/cscope-prepare), run from a worktree's src/ dir.
+    {
+        "dhananjaylatkar/cscope_maps.nvim",
+        ft = { "c", "cpp" },
+        opts = {
+            -- disabled: the plugin's default <leader>ca ("find assignments")
+            -- collides with the LSP code-action keymap in plugins/lsp.lua.
+            disable_maps = true,
+            cscope = {
+                db_file = "./cscope.out",
+                picker = "quickfix",
+            },
+        },
+        config = function(_, opts)
+            require("cscope_maps").setup(opts)
+            local map = vim.keymap.set
+            local function find(op) return "<cmd>CsPrompt " .. op .. "<CR>" end
+            map("n", "<Leader>cs", find("s"), { desc = "cscope: find symbol" })
+            map("n", "<Leader>cg", find("g"), { desc = "cscope: find global definition" })
+            map("n", "<Leader>cc", find("c"), { desc = "cscope: find callers" })
+            map("n", "<Leader>cd", find("d"), { desc = "cscope: find callees" })
+            map("n", "<Leader>ct", find("t"), { desc = "cscope: find text" })
+            map("n", "<Leader>ce", find("e"), { desc = "cscope: egrep pattern" })
+            map("n", "<Leader>cf", find("f"), { desc = "cscope: find file" })
+            map("n", "<Leader>ci", find("i"), { desc = "cscope: find files including" })
+        end,
+    },
+
     -- Unix helpers (:Rename, :Delete, :Move, etc.)
     { "tpope/vim-eunuch" },
 
