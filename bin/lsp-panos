@@ -868,6 +868,7 @@ def write_meta(repo: Path, tgt: Target):
         "target": tgt.name,
         "entries": n,
         "git_head": head,
+        "version_key": version_key(repo),
         "built_at": datetime.now(timezone.utc).isoformat(),
         "indexer": os.path.basename(INDEXER),
     }, indent=2))
@@ -899,7 +900,14 @@ def cmd_list(repo: Path):
             continue
         has_idx = (d / "panos.idx").exists()
         mark = " (*)" if d.name == active else ""
-        print(f"  {d.name}  index={'yes' if has_idx else 'NO'}{mark}")
+        vk = "?"
+        m = d / "meta.json"
+        if m.exists():
+            try:
+                vk = json.loads(m.read_text()).get("version_key", "?")
+            except Exception:
+                pass
+        print(f"  {d.name}[{vk}]  index={'yes' if has_idx else 'NO'}{mark}")
     if not active:
         print("No active target")
     elif not (targets_dir / active).exists():
