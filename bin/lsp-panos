@@ -1107,9 +1107,10 @@ def main():
     ap.add_argument("--list-cache", dest="list_cache", action="store_true",
                     help=f"list the shared cache store ({CACHE_ROOT})")
     ap.add_argument("--use-cache", dest="use_cache", nargs="+",
-                    metavar="<platform>",
-                    help="import cached compile_commands.json for ONE platform, then index; "
-                         "optional rpm filter: --use-cache <platform> [mpfs|dpfs|idpfs]")
+                    metavar="<platform[,platform..]>",
+                    help="import cached compile_commands.json for one or more comma-separated "
+                         "platforms, then index; optional rpm filter: "
+                         "--use-cache <platform[,platform..]> [mpfs|dpfs|idpfs]")
     ap.add_argument("--save-cache", dest="save_cache", action="store_true",
                     help="save built compile_commands.json to the shared cache store")
     ap.add_argument("--from", dest="from_key", metavar="<version-key>",
@@ -1162,11 +1163,17 @@ def main():
     if args.use_cache:
         vals = args.use_cache
         if len(vals) > 2:
-            die("--use-cache supports only ONE platform: "
-                "--use-cache <platform> [mpfs|dpfs|idpfs]")
-        platform = vals[0]
+            die("--use-cache takes <platform>[,<platform>..] [mpfs|dpfs|idpfs]")
+        # Comma-separated platforms, matching --platforms. Imported one at a
+        # time: a missing platform still dies with the available-cache listing,
+        # but whatever imported before it is already on disk.
+        platforms = [p.strip() for p in vals[0].split(",") if p.strip()]
+        if not platforms:
+            die("--use-cache: no platform given")
         rpm = vals[1] if len(vals) == 2 else None
-        return cmd_use_cache(repo, platform, rpm, override_key=args.from_key)
+        for plat in platforms:
+            cmd_use_cache(repo, plat, rpm, override_key=args.from_key)
+        return
 
     # --save-cache with no build stages requested = save already-built targets.
     if args.save_cache and not (args.platforms or args.do):
