@@ -851,7 +851,12 @@ def stage_index(repo: Path, tgt: Target, args):
          f"{processed} TUs) in {fmt_dur(time.time()-t0)}")
 
 
-def write_meta(repo: Path, tgt: Target):
+def write_meta(repo: Path, tgt: Target, version: str = None):
+    """Record what this target was built from. 'version' overrides the
+    worktree's own tag: a cache-imported target's compile_commands.json comes
+    from the CACHE's version, which may differ from whatever this worktree is
+    currently checked out at -- recording the worktree tag there would label
+    the target with a baseline its code did not come from."""
     try:
         head = subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "--short", "HEAD"],
@@ -868,7 +873,7 @@ def write_meta(repo: Path, tgt: Target):
         "target": tgt.name,
         "entries": n,
         "git_head": head,
-        "version_key": version_key(repo),
+        "version_key": version or version_key(repo),
         "built_at": datetime.now(timezone.utc).isoformat(),
         "indexer": os.path.basename(INDEXER),
     }, indent=2))
@@ -1063,7 +1068,7 @@ def cmd_use_cache(repo: Path, platform: str, rpm: str = None, override_key: str 
         info(f"=== index {tgt.name} (from cache) [{_i+1}/{_n}] ===")
         try:
             stage_index(repo, tgt, None)
-            write_meta(repo, tgt)
+            write_meta(repo, tgt, version=vk)
         except StageError as e:
             info(f"[skip] {tgt.name}: {e}")
             failed.append((tgt.name, str(e)))
