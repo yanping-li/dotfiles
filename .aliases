@@ -53,3 +53,6 @@ if command -v nvim &>/dev/null; then
     alias vi='nvim'
     alias vim='nvim'
 fi
+
+# Fix pane stuck in alternate screen (e.g. after vim/fzf crash)
+alias fixterm='printf "\033[?1049l"'
