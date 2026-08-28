@@ -56,7 +56,9 @@ local function follow_md_link()
         buf = vim.api.nvim_get_current_buf(),
         pos = vim.api.nvim_win_get_cursor(0),
       })
-      vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.expand(path)))
+      local dir = vim.fn.expand('%:p:h')
+      local full_path = dir .. '/' .. path
+      vim.cmd('edit ' .. vim.fn.fnameescape(full_path))
       return
     end
   end
