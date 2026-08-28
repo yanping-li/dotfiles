@@ -44,6 +44,40 @@ map("n", "<Leader>h", "<cmd>nohlsearch<CR>")
 map("n", "<Leader>t", "<cmd>split | term<CR>")
 map("t", "<Esc>", "<C-\\><C-n>")
 
+-- Markdown link navigation: Ctrl+] to follow, Ctrl+T to go back
+local md_link_stack = {}
+
+local function follow_md_link()
+  local line = vim.api.nvim_get_current_line()
+  local col = vim.api.nvim_win_get_cursor(0)[2] + 1
+  for s, path, e in line:gmatch('()%[.-%]%((.-)%)()') do
+    if col >= s and col <= e then
+      table.insert(md_link_stack, {
+        buf = vim.api.nvim_get_current_buf(),
+        pos = vim.api.nvim_win_get_cursor(0),
+      })
+      vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.expand(path)))
+      return
+    end
+  end
+end
+
+local function pop_md_link()
+  if #md_link_stack > 0 then
+    local prev = table.remove(md_link_stack)
+    vim.api.nvim_win_set_buf(0, prev.buf)
+    vim.api.nvim_win_set_cursor(0, prev.pos)
+  end
+end
+
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'markdown',
+  callback = function()
+    map('n', '<C-]>', follow_md_link, { buffer = true })
+    map('n', '<C-t>', pop_md_link,    { buffer = true })
+  end,
+})
+
 -- Open current file in TextEdit (macOS)
 if vim.fn.has("mac") == 1 then
     map("n", "<F3>", "<cmd>!open -a TextEdit %<CR>")
