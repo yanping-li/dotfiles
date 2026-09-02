@@ -32,13 +32,28 @@ function M.cmp()
     })
 end
 
+-- Height of the quickfix window that 'gr' (references) opens. nvim's built-in
+-- handler hardcodes a bare 'botright copen' (default 10 lines), so override the
+-- list handler to pass an explicit height. Scoped to references only, so the
+-- cscope picker keeps its own window sizing.
+local REFERENCES_QF_HEIGHT = 20
+
+local function references_sized()
+    vim.lsp.buf.references(nil, {
+        on_list = function(list)
+            vim.fn.setqflist({}, " ", list)
+            vim.cmd("botright copen " .. REFERENCES_QF_HEIGHT)
+        end,
+    })
+end
+
 local function on_attach(args)
     local bufnr = args.buf
     local map = function(keys, func)
         vim.keymap.set("n", keys, func, { buffer = bufnr })
     end
     map("gd", vim.lsp.buf.definition)
-    map("gr", vim.lsp.buf.references)
+    map("gr", references_sized)
     map("K", vim.lsp.buf.hover)
     map("<Leader>rn", vim.lsp.buf.rename)
     map("<Leader>ca", vim.lsp.buf.code_action)
